@@ -1,1 +1,5 @@
 /dist/
+/docs/design/_build/
+/docs/design/.quarto/
+/docs/design/tools/node_modules/
+/docs/design/*.typ

@@ -1,0 +1,70 @@
+# Architecture: plugins reach the Flix compiler only through the shared SDK.
+# Rendered to ../figures/architecture.svg by scripts/docs.sh. Edit this file, not the SVG.
+# print-width: 580
+
+direction: down
+
+classes: {
+  existing: {
+    style: {
+      fill: "#FFFFFF"
+      stroke: "#8A8F98"
+      stroke-width: 1
+      border-radius: 8
+      font-color: "#1F2328"
+      font-size: 15
+    }
+  }
+  new: {
+    style: {
+      fill: "#EAF2FE"
+      stroke: "#2F6FDB"
+      stroke-width: 2
+      border-radius: 8
+      font-color: "#1F2328"
+      font-size: 15
+    }
+  }
+  layer: {
+    style: {
+      fill: "#F3F4F6"
+      stroke: "#8A8F98"
+      stroke-width: 1
+      border-radius: 6
+      font-color: "#1F2328"
+      font-size: 14
+    }
+  }
+  flow: {
+    style: {
+      stroke: "#6B7280"
+      stroke-width: 2
+      font-color: "#4B5563"
+      font-size: 13
+    }
+  }
+}
+
+project: "Flix project\nyour code, tests, lock.toml" {class: existing}
+flixw: "flixw (existing)\npins the compiler, verifies plugins" {class: existing}
+testkit: "flix-datalog-testkit (new)\nFlix package: metamorphic Datalog tests" {class: new}
+metrics: "flixw-metrics (existing)\nrules, reports" {class: existing}
+mutate: "flixw-mutate (new)\noperators, engine, reports" {class: new}
+
+sdk: "" {
+  class: new
+  style.fill: "#F8FBFF"
+  model: "flixw-compiler-sdk (new): stable model\nrecords without compiler types\nDatalog rewrite hook\ncompatibility report" {class: layer}
+  layer: "flixw-compiler-sdk (new): compiler layer\nversion adapters · ABI + smoke checks\nprogram loading · test runner\nthe only code that touches Flix" {class: layer}
+  model -> layer: {class: flow}
+}
+
+compiler: "Flix compiler, pinned and unmodified\nincl. Fixpoint3 Datalog solver" {class: existing}
+
+project -> flixw: runs {class: flow}
+project -> testkit: tests use {class: flow}
+flixw -> metrics: loads plugin {class: flow}
+flixw -> mutate: loads plugin {class: flow}
+metrics -> sdk.model: model API only {class: flow}
+mutate -> sdk.model: model API only {class: flow}
+sdk.layer -> compiler: reflection, load-time hook {class: flow}

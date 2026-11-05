@@ -1,0 +1,58 @@
+# Flow of one `./flixw mutate` run: check the compiler first, compile once, loop over mutants.
+# Rendered to ../figures/mutate-flow.svg by scripts/docs.sh. Edit this file, not the SVG.
+# print-width: 420
+
+direction: down
+
+classes: {
+  step: {
+    style: {
+      fill: "#FFFFFF"
+      stroke: "#8A8F98"
+      stroke-width: 1
+      border-radius: 8
+      font-color: "#1F2328"
+      font-size: 15
+    }
+  }
+  hot: {
+    style: {
+      fill: "#EAF2FE"
+      stroke: "#2F6FDB"
+      stroke-width: 2
+      border-radius: 8
+      font-color: "#1F2328"
+      font-size: 15
+    }
+  }
+  stop: {
+    style: {
+      fill: "#FDF0F0"
+      stroke: "#C2413B"
+      stroke-width: 2
+      border-radius: 8
+      font-color: "#1F2328"
+      font-size: 15
+    }
+  }
+  flow: {
+    style: {
+      stroke: "#6B7280"
+      stroke-width: 2
+      font-color: "#4B5563"
+      font-size: 14
+    }
+  }
+}
+
+check: "Resolve pinned compiler,\ncompatibility check\nallowlist · ABI · smoke test" {class: step}
+abort: "Exit code 2\nnames version and\nmissing symbol" {class: stop}
+compile: "Compile\nproject once" {class: step}
+loop: "Mutate one Datalog rule,\nrun tests, classify:\nkilled · survived ·\ninvalid · equivalent" {class: hot}
+report: "Write report\nPIT mutations.xml" {class: step}
+
+check -> abort: fails {class: flow}
+check -> compile: passes {class: flow}
+compile -> loop: {class: flow}
+loop -> loop: next mutant {class: flow}
+loop -> report: all done {class: flow}

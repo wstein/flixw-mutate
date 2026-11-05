@@ -1,0 +1,17 @@
+project:
+  type: default
+  output-dir: _build
+  render:
+    - DESIGN.md
+
+format:
+  typst:
+    papersize: a4
+    margin:
+      x: 2.2cm
+      y: 2.4cm
+    fontsize: 10pt
+    section-numbering: "1."
+    shift-heading-level-by: -1
+    toc: false
+    fig-align: center
