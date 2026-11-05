@@ -79,6 +79,27 @@ On failure the plugin exits with code 2, naming the compiler version and the mis
 
 ![Flow of one ./flixw mutate run: compatibility check, compile once, then loop over mutants until the report is written](figures/mutate-flow.svg)
 
+### What flixw-metrics already provides
+
+flixw-metrics detects an unsupported compiler well, but only structurally: it checks that classes and signatures exist, never that the compiler behaves as expected. Reviewed on 5 Nov 2026; paths are relative to `plugin/src/dev/flixw/metrics/`.
+
+1. `Main.java` requires `FLIXW_ABI_VERSION=1`.
+2. `CompilerCapabilities.inspect` loads the pinned compiler in an isolated class loader. For each adapter, `sdk/AdapterAbi.java` reads the adapter's own class files, including nested `$` classes, collects every `ca/uwaterloo/flix/*` reference and resolves it with `Class.forName(…, false, loader)` and an exact descriptor match. The compiler is never initialised.
+3. `sdk/Adapters.java` picks the newest adapter whose references all resolve.
+4. If none does, or a `LinkageError` occurs later, the plugin exits with code 2 and names the jar and the missing references.
+
+Behaviour is checked only in CI: fixed expected values in `PluginIntegrationTest`, one test per adapter, and a weekly corpus calibration against compiler 0.77.0 alone. Twelve compiler versions from 0.60.0 to 0.77.0 are accepted; 0.59.0 and 0.66.0 are rejected on purpose.
+
+For the solver hook these checks fall short, which turns into requirements for the shared SDK:
+
+| Gap today | Consequence for the solver hook | Requirement for the SDK |
+| --- | --- | --- |
+| The ABI check sees only references in the adapter's own bytecode. | A hook made by reflection or bytecode rewriting is invisible to it; nothing references Fixpoint or the solver today. | Hook targets (class, method, descriptor) are declared in the contract and checked like any other reference. |
+| Members are looked up through public `getMethods()` and `getFields()` only. | An internal Scala method is reported missing although it exists; a method with changed behaviour still passes. | Declared-member lookup for hook targets, always paired with the smoke test. |
+| No behavioural check at run time. | A matching signature does not prove the hook works. | A run-time smoke test in the SDK, reusable by metrics. |
+| `Adapters.resolve()` silently falls back to an older adapter. | A skipped adapter and its reason are lost. | Log skipped adapters and reasons; include them in the compatibility report. |
+| Calibration covers one compiler and metrics only. | Solver semantics on other versions are untested. | A CI matrix over the allowlist that runs the solver smoke test. |
+
 ## Delivery
 
 The engine is a standalone jar; the product is a flixw plugin. No piece depends on changes to Flix.
@@ -123,7 +144,7 @@ The project runs `./flixw`, which loads both plugins; only the SDK's compiler la
 ## Open questions
 
 - Which hook route works on the pinned compiler: bytecode rewrite or patched library source?
-- Which compiler versions go on the initial allowlist for the compatibility check?
+- Which of the twelve compiler versions flixw-metrics accepts also pass the solver smoke test, and so form the initial allowlist?
 - Without a public test-runner API: run single tests through the internal `Tester` classes, or whole suites per mutant?
 - Does the `Mutant.on` switch for option 4 type-check under the current effect system?
 
