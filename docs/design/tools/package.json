@@ -1,0 +1,9 @@
+{
+  "name": "flixw-mutate-docs-tools",
+  "private": true,
+  "type": "module",
+  "description": "Renders the design document's D2 diagrams to SVG.",
+  "dependencies": {
+    "@terrastruct/d2": "0.1.33"
+  }
+}

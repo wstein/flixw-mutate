@@ -1,0 +1,44 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "scripts/docs.sh", ".github/workflows/docs.yml"]
+  pull_request:
+    paths: ["docs/**", "scripts/docs.sh", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  design-pdf:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq librsvg2-bin
+          pip install matplotlib==3.11.2 quarto-cli==1.11.9
+      - name: Render figures and PDF
+        run: sh scripts/docs.sh
+      - name: Check committed figures
+        # Renderer versions can differ slightly from a local machine, so a difference
+        # is reported, not fatal. The PDF below is always built from fresh figures.
+        run: |
+          if ! git diff --quiet -- docs/design/figures; then
+            echo "::warning title=Stale figures::docs/design/figures differ from their sources; run 'sh scripts/docs.sh figures' and commit."
+            git diff --stat -- docs/design/figures
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: design-pdf
+          path: docs/design/_build/DESIGN.pdf
+          if-no-files-found: error

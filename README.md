@@ -1,4 +1,10 @@
-# flixw Java plugin template
+# flixw-mutate
+
+Mutation testing for [Flix](https://flix.dev) projects, as a [flixw](https://github.com/wstein/flixw) plugin (`./flixw mutate`). Status: design phase; start with the [design document](docs/design/DESIGN.md). A typeset PDF is built by CI (`docs` workflow, `design-pdf` artifact) or locally with `sh scripts/docs.sh`.
+
+The rest of this README is the plugin template it was created from.
+
+## flixw Java plugin template
 
 A small, dependency-free starting point for a third-party
 [flixw](https://github.com/wstein/flixw) plugin. It produces one executable Java 21 JAR

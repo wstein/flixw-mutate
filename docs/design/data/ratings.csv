@@ -1,0 +1,10 @@
+id,name,value,effort,overall,recommended
+1,PITest on bytecode,3,6,3,false
+2,Text mutation,5,2,5,false
+3,Typed-AST plugin,8,5,7,false
+4,Mutant schemata,9,6,9,true
+5,Upstream phase,9,8,6,false
+6,Datalog at solver,9,4,9,true
+7,Rule coverage,7,3,8,true
+8,Metamorphic tests,7,3,7,false
+9,PIT-format reports,6,1,7,false
