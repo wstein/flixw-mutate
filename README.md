@@ -46,3 +46,7 @@ in output.
 
 See flixw's [plugin contract](https://github.com/wstein/flixw/blob/main/docs/CONTRACT.md#flixw-plugin)
 for the complete ABI.
+
+## License
+
+Apache-2.0, see `LICENSE`.
