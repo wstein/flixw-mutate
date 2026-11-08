@@ -11,7 +11,7 @@ Reviewed: [flix/flix](https://github.com/flix/flix) at commit `99509a9` (HEAD on
 - **Flix has its own test runner, not JUnit.** `tools/Tester.scala` takes tests from `LoadedProgram.tests`, each a `run` closure. PITest only knows JUnit and TestNG, so it would need a custom test plugin. The upside: anything holding a `LoadedProgram` can compile once and rerun tests in one JVM.
 - **Flix bytecode is far from the source.** It has been monomorphised, erased, boxed, lambda-lifted and trampolined. The backend emits line numbers (`jvm/Instructions.scala`), but many bytecode mutants would hit runtime plumbing, not your logic.
 - **Datalog runs on a solver written in Flix.** `Fixpoint3` turns constraints into a `Fixpoint3.Ast.Datalog` value (`Constraint(HeadPredicate, Vector[BodyPredicate])`) and evaluates it in `Solver.runSolverInternal`. Rules can be mutated as data at run time, with no recompile. This is the biggest finding.
-- **flixw-metrics already solved the plumbing.** It has version-pinned compiler adapters, an `AdapterAbi` check of the compiler API, typed-AST access with source locations, and `DatalogGraph`, which finds recursive predicate groups. A mutation plugin can copy that architecture.
+- **flixw-metrics already solved the plumbing.** It has version-pinned compiler adapters, an `AdapterAbi` check of the compiler API, typed-AST access with source locations, and `DatalogGraph`, which finds recursive predicate groups. A mutation plugin can share that architecture through the SDK.
 
 ## Ratings at a glance
 
@@ -71,7 +71,7 @@ Rule coverage (option 7) uses the same hook, so it comes almost for free.
 
 Before the first mutant, the plugin runs three checks and stops at the first failure:
 
-1. **Version allowlist:** the version from `FLIXW_COMPILER_VERSION` must be listed in the SDK's `versions.json`.
+1. **Version allowlist:** the version from `FLIXW_COMPILER_VERSION` must be listed in the SDK's `versions.json` with the `SolverHook` capability. The variable is absent without a lock: exit 2, naming the missing lock.
 2. **ABI check:** in the style of `AdapterAbi`, reflection without initialisation confirms that the solver class, the hooked method's signature and the `Constraint` types exist exactly as the hook expects.
 3. **Smoke test:** a small built-in Datalog program runs once unchanged and once with one rule dropped; the derived model must differ.
 
