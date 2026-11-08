@@ -119,7 +119,7 @@ flixw supplies the pinned compiler, digest checks and the lock entry. flixw-metr
 
 metrics and mutate share one library; no plugin ever imports a `ca.uwaterloo.flix` class directly, so a compiler update changes one place.
 
-The SDK is one repository, `flixw-compiler-sdk`, with two modules. A plugin is one JAR and embeds a fixed SDK version; plugins never depend on each other at run time.
+The SDK is one repository, `flixw-plugin-sdk`, with two modules. A plugin is one JAR and embeds a fixed SDK version; plugins never depend on each other at run time.
 
 | Layer | Contains | Touches Flix internals |
 | --- | --- | --- |
@@ -140,9 +140,9 @@ Constraint: there is no access to the Flix repository and no upstream change is 
 | Repository | Status | Role | Depends on |
 | --- | --- | --- | --- |
 | wstein/flixw | Existing | Wrapper: pins the compiler, hosts and verifies plugins | — |
-| wstein/flixw-compiler-sdk | New | `kit` + `flix-bridge`, extracted from flixw-metrics | Pinned Flix compiler (at run time) |
-| wstein/flixw-metrics | Existing | Metrics plugin, slimmed to rules and reports | flixw-compiler-sdk |
-| wstein/flixw-mutate | New (this repository) | Mutation engine jar + `./flixw mutate` plugin | flixw-compiler-sdk |
+| wstein/flixw-plugin-sdk | New | `kit` + `flix-bridge`, extracted from flixw-metrics | Pinned Flix compiler (at run time) |
+| wstein/flixw-metrics | Existing | Metrics plugin, slimmed to rules and reports | flixw-plugin-sdk |
+| wstein/flixw-mutate | New (this repository) | Mutation engine jar + `./flixw mutate` plugin | flixw-plugin-sdk |
 | wstein/flix-datalog-testkit | New | Flix package with metamorphic Datalog test helpers | Flix standard library |
 
 ![Architecture: the project runs flixw, which loads both plugins; only the SDK's flix-bridge touches Flix](figures/architecture.svg)

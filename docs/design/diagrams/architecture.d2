@@ -54,9 +54,9 @@ mutate: "flixw-mutate (new)\noperators, engine, reports" {class: new}
 sdk: "" {
   class: new
   style.fill: "#F8FBFF"
-  model: "flixw-compiler-sdk (new): flix-bridge, stable model\nrecords without compiler types\nSolverHook after the spike" {class: layer}
-  layer: "flixw-compiler-sdk (new): flix-bridge\nversion adapters · ABI + smoke checks\nprogram loading · test runner\nthe only code that touches Flix" {class: layer}
-  kit: "flixw-compiler-sdk (new): kit\nplugin shell, exit codes, report header\nknows nothing of Flix" {class: layer}
+  model: "flixw-plugin-sdk (new): flix-bridge, stable model\nrecords without compiler types\nSolverHook after the spike" {class: layer}
+  layer: "flixw-plugin-sdk (new): flix-bridge\nversion adapters · ABI + smoke checks\nprogram loading · test runner\nthe only code that touches Flix" {class: layer}
+  kit: "flixw-plugin-sdk (new): kit\nplugin shell, exit codes, report header\nknows nothing of Flix" {class: layer}
   model -> layer: {class: flow}
   layer -> kit: depends on {class: flow}
 }
