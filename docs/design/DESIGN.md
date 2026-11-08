@@ -71,7 +71,7 @@ Rule coverage (option 7) uses the same hook, so it comes almost for free.
 
 Before the first mutant, the plugin runs three checks and stops at the first failure:
 
-1. **Version allowlist:** the compiler version pinned in `lock.toml` must be on the plugin's list of tested versions.
+1. **Version allowlist:** the version from `FLIXW_COMPILER_VERSION` must be listed in the SDK's `versions.json`.
 2. **ABI check:** in the style of `AdapterAbi`, reflection without initialisation confirms that the solver class, the hooked method's signature and the `Constraint` types exist exactly as the hook expects.
 3. **Smoke test:** a small built-in Datalog program runs once unchanged and once with one rule dropped; the derived model must differ.
 
