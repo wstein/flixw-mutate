@@ -131,7 +131,7 @@ The module is called `flix-bridge`, not `compiler`, because `compiler` is easily
 
 Capabilities: an adapter implements capabilities (`Metrics`, `ProgramLoader`, `TestRunner`, later `SolverHook`), and the linkage check runs per capability. The `SolverHook` interface is defined only after the spike (#1), not guessed with one consumer.
 
-Boundaries: the stable model is the only API plugins see; rules, operators, engine and report formats stay in the plugins. Supported compiler versions are data in `versions.json` with the digest of each compiler JAR; the plugin reads `flixVersion` from `FLIXW_COMPILER_VERSION`. The SDK ships as a release asset with SHA-256, pinned by version and digest and embedded in each plugin; publishing stays an owner approval.
+Boundaries: the stable model is the only `flix-bridge` API plugins see; besides it they use `kit`; rules, operators, engine and report formats stay in the plugins. Supported compiler versions are data in `versions.json` with the digest of each compiler JAR; the plugin reads `flixVersion` from `FLIXW_COMPILER_VERSION`. The SDK ships as a release asset with SHA-256, pinned by version and digest and embedded in each plugin; publishing stays an owner approval.
 
 Constraint: there is no access to the Flix repository and no upstream change is expected. Everything runs against unmodified stock compilers, and per-capability linkage checks are the only protection against compiler changes.
 
