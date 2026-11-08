@@ -75,7 +75,7 @@ Before the first mutant, the plugin runs three checks and stops at the first fai
 2. **ABI check:** in the style of `AdapterAbi`, reflection without initialisation confirms that the solver class, the hooked method's signature and the `Constraint` types exist exactly as the hook expects.
 3. **Smoke test:** a small built-in Datalog program runs once unchanged and once with one rule dropped; the derived model must differ.
 
-On failure the plugin exits with code 2, naming the compiler version and the missing or mismatched symbol. It never reports a run silently as zero mutants killed.
+On failure the plugin exits with code 2, naming the compiler version (or the missing lock, see above) and the missing or mismatched symbol. It never reports a run silently as zero mutants killed.
 
 ![Flow of one ./flixw mutate run: compatibility check, compile once, then loop over mutants until the report is written](figures/mutate-flow.svg)
 
