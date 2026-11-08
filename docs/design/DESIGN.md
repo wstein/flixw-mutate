@@ -94,10 +94,10 @@ For the solver hook these checks fall short, which turns into requirements for t
 
 | Gap today | Consequence for the solver hook | Requirement for the SDK |
 | --- | --- | --- |
-| The ABI check sees only references in the adapter's own bytecode. | A hook made by reflection or bytecode rewriting is invisible to it; nothing references Fixpoint or the solver today. | Hook targets (class, method, descriptor) are declared in the contract and checked like any other reference. |
+| The ABI check sees only references in the adapter's own bytecode. | A hook made by reflection or bytecode rewriting is invisible to it; nothing references Fixpoint or the solver today. | Hook targets (class, method, descriptor) are declared in the contract and checked like any other reference. The `SolverHook` interface follows after the spike (#1). |
 | Members are looked up through public `getMethods()` and `getFields()` only. | An internal Scala method is reported missing although it exists; a method with changed behaviour still passes. | Declared-member lookup for hook targets, always paired with the smoke test. |
 | No behavioural check at run time. | A matching signature does not prove the hook works. | A run-time smoke test in the SDK, reusable by metrics. |
-| `Adapters.resolve()` silently falls back to an older adapter. | A skipped adapter and its reason are lost. | Log skipped adapters and reasons; include them in the compatibility report. |
+| `Adapters.resolve()` silently falls back to an older adapter. | A skipped adapter and its reason are lost. | Log skipped adapters and reasons; include them in the compatibility report header. |
 | Calibration covers one compiler and metrics only. | Solver semantics on other versions are untested. | A CI matrix over the allowlist that runs the solver smoke test. |
 
 ## Delivery
@@ -119,27 +119,35 @@ flixw supplies the pinned compiler, digest checks and the lock entry. flixw-metr
 
 metrics and mutate share one library; no plugin ever imports a `ca.uwaterloo.flix` class directly, so a compiler update changes one place.
 
+The SDK is one repository, `flixw-compiler-sdk`, with two modules. A plugin is one JAR and embeds a fixed SDK version; plugins never depend on each other at run time.
+
 | Layer | Contains | Touches Flix internals |
 | --- | --- | --- |
-| Compiler layer | Per-version adapters, ABI check (today `AdapterAbi`), behavioural smoke tests, program loading, test-runner access | Yes, only here |
-| Stable model | Records with no compiler types (today `CompilerModel`), the Datalog constraint-rewrite hook interface, compatibility report | No |
+| `kit` (`dev.flixw.sdk.kit`) | Plugin shell, shared exit codes; knows nothing of Flix | No |
+| `flix-bridge` (`dev.flixw.sdk.bridge`), depends on `kit` | Per-version adapters (one class per capability and Flix family), ABI driver (today `AdapterAbi`), version data (`versions.json`), stable model with no compiler types (today `CompilerModel`), `DatalogGraph` | Yes, only here |
 | Plugins | metrics rules and reports; mutation operators, engine and reports | No |
 
-Boundaries: the model is the only API plugins see; rules, operators and report formats stay in the plugins. The SDK publishes the list of compiler versions it supports, and each plugin declares the SDK version it needs.
+The module is called `flix-bridge`, not `compiler`, because `compiler` is easily confused with the Flix compiler itself.
+
+Capabilities: an adapter implements capabilities (`Metrics`, `ProgramLoader`, `TestRunner`, later `SolverHook`), and the linkage check runs per capability. The `SolverHook` interface is defined only after the spike (#1), not guessed with one consumer.
+
+Boundaries: the stable model is the only API plugins see; rules, operators, engine and report formats stay in the plugins. Supported compiler versions are data in `versions.json` with the digest of each compiler JAR; the plugin reads `flixVersion` from `FLIXW_COMPILER_VERSION`. The SDK ships as a release asset with SHA-256, pinned by version and digest and embedded in each plugin; publishing stays an owner approval.
+
+Constraint: there is no access to the Flix repository and no upstream change is expected. Everything runs against unmodified stock compilers, and per-capability linkage checks are the only protection against compiler changes.
 
 ## Repository layout
 
 | Repository | Status | Role | Depends on |
 | --- | --- | --- | --- |
 | wstein/flixw | Existing | Wrapper: pins the compiler, hosts and verifies plugins | — |
-| wstein/flixw-compiler-sdk | New | Compiler layer + stable model, extracted from flixw-metrics | Pinned Flix compiler (at run time) |
+| wstein/flixw-compiler-sdk | New | `kit` + `flix-bridge`, extracted from flixw-metrics | Pinned Flix compiler (at run time) |
 | wstein/flixw-metrics | Existing | Metrics plugin, slimmed to rules and reports | flixw-compiler-sdk |
 | wstein/flixw-mutate | New (this repository) | Mutation engine jar + `./flixw mutate` plugin | flixw-compiler-sdk |
 | wstein/flix-datalog-testkit | New | Flix package with metamorphic Datalog test helpers | Flix standard library |
 
-![Architecture: the project runs flixw, which loads both plugins; only the SDK's compiler layer touches Flix](figures/architecture.svg)
+![Architecture: the project runs flixw, which loads both plugins; only the SDK's flix-bridge touches Flix](figures/architecture.svg)
 
-The project runs `./flixw`, which loads both plugins; only the SDK's compiler layer touches Flix.
+The project runs `./flixw`, which loads both plugins; only the SDK's `flix-bridge` touches Flix.
 
 ## Open questions
 
