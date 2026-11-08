@@ -54,8 +54,8 @@ mutate: "flixw-mutate (new)\noperators, engine, reports" {class: new}
 sdk: "" {
   class: new
   style.fill: "#F8FBFF"
-  model: "flixw-compiler-sdk (new): stable model\nrecords without compiler types\nDatalog rewrite hook\ncompatibility report" {class: layer}
-  layer: "flixw-compiler-sdk (new): compiler layer\nversion adapters · ABI + smoke checks\nprogram loading · test runner\nthe only code that touches Flix" {class: layer}
+  model: "flixw-compiler-sdk (new): flix-bridge, stable model\nrecords without compiler types\nSolverHook after the spike\ncompatibility report" {class: layer}
+  layer: "flixw-compiler-sdk (new): flix-bridge\nversion adapters · ABI + smoke checks\nprogram loading · test runner\nthe only code that touches Flix" {class: layer}
   model -> layer: {class: flow}
 }
 
