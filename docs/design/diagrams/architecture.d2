@@ -54,9 +54,11 @@ mutate: "flixw-mutate (new)\noperators, engine, reports" {class: new}
 sdk: "" {
   class: new
   style.fill: "#F8FBFF"
-  model: "flixw-compiler-sdk (new): flix-bridge, stable model\nrecords without compiler types\nSolverHook after the spike\ncompatibility report" {class: layer}
+  model: "flixw-compiler-sdk (new): flix-bridge, stable model\nrecords without compiler types\nSolverHook after the spike" {class: layer}
   layer: "flixw-compiler-sdk (new): flix-bridge\nversion adapters · ABI + smoke checks\nprogram loading · test runner\nthe only code that touches Flix" {class: layer}
+  kit: "flixw-compiler-sdk (new): kit\nplugin shell, exit codes, report header\nknows nothing of Flix" {class: layer}
   model -> layer: {class: flow}
+  layer -> kit: depends on {class: flow}
 }
 
 compiler: "Flix compiler, pinned and unmodified\nincl. Fixpoint3 Datalog solver" {class: existing}
@@ -65,6 +67,8 @@ project -> flixw: runs {class: flow}
 project -> testkit: tests use {class: flow}
 flixw -> metrics: loads plugin {class: flow}
 flixw -> mutate: loads plugin {class: flow}
-metrics -> sdk.model: model API only {class: flow}
-mutate -> sdk.model: model API only {class: flow}
+metrics -> sdk.model: stable model {class: flow}
+mutate -> sdk.model: stable model {class: flow}
+metrics -> sdk.kit: plugin shell {class: flow}
+mutate -> sdk.kit: plugin shell {class: flow}
 sdk.layer -> compiler: reflection, load-time hook {class: flow}
