@@ -1,0 +1,30 @@
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the pinned SDK revision
+        id: sdk-pin
+        run: echo "revision=$(awk -F= '$1 == "revision" {print $2}' sdk-source.properties)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: wstein/flixw-plugin-sdk
+          ref: ${{ steps.sdk-pin.outputs.revision }}
+          path: .sdk-source
+      - name: Select the SDK source checkout
+        run: echo "FLIXW_SDK_SOURCE=$GITHUB_WORKSPACE/.sdk-source" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: sh scripts/test.sh
