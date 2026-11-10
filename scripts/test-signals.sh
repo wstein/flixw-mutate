@@ -23,14 +23,16 @@ check() {
   checks=$((checks + 1))
 }
 check "$root/scripts/test-plugin.sh" "$root/dist-unused.jar" 0.0.0-test
-# The other scripts use the same trap lines; no trap may be left without an exit on a signal.
-for script in "$root"/scripts/test*.sh "$root/scripts/package.sh"; do
-  [ "${script##*/}" != test-signals.sh ] || continue
-  if grep -q "^trap .*INT" "$script" && grep -q 'INT TERM' "$script"; then
-    echo "test-signals: ${script##*/} traps INT and TERM without exiting" >&2; exit 1
+# Every script that sets a trap must exit on INT (130) and TERM (143) instead of running on.
+for script in "$root"/scripts/*.sh; do
+  name=${script##*/}
+  [ "$name" != test-signals.sh ] || continue
+  grep -q '^trap ' "$script" || continue
+  if grep '^trap ' "$script" | grep -v "^trap 'exit 130' INT\$" | grep -v "^trap 'exit 143' TERM\$" | grep -qE ' (INT|TERM)'; then
+    echo "test-signals: $name lists INT in a cleanup trap without exiting" >&2; exit 1
   fi
-  grep -q "^trap 'exit 143' TERM" "$script" || {
-    echo "test-signals: ${script##*/} has no TERM trap that exits" >&2; exit 1; }
+  grep -q "^trap 'exit 130' INT\$" "$script" || { echo "test-signals: $name has no INT trap that exits 130" >&2; exit 1; }
+  grep -q "^trap 'exit 143' TERM\$" "$script" || { echo "test-signals: $name has no TERM trap that exits 143" >&2; exit 1; }
   checks=$((checks + 1))
 done
 printf 'test-signals: %s passed, 0 failed\n' "$checks"

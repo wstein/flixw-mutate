@@ -34,7 +34,9 @@ ignored=$(git -C "$source" ls-files --others --ignored --exclude-standard -- kit
 [ -z "$ignored" ] || fail 'SDK inputs contain ignored files under kit/src or kit/resources'
 # Status honors assume-unchanged and skip-worktree. Compare consumed bytes to HEAD as well.
 tracked=$(mktemp)
-trap 'rm -f "$tracked"' EXIT INT TERM
+trap 'rm -f "$tracked"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 git -C "$source" ls-tree -r HEAD -- kit/src kit/resources > "$tracked" || fail 'cannot read pinned SDK tree'
 while IFS="$(printf '\t')" read -r entry path; do
   expected=${entry##* }
