@@ -6,6 +6,8 @@
 
 **Addition (10 Nov 2026):** option 4, mutant schemata for functional code, will be implemented as well ([#9](https://github.com/wstein/flixw-mutate/issues/9)). The order of the first release is open.
 
+**Decisions after the spike (10 Nov 2026, [#1](https://github.com/wstein/flixw-mutate/issues/1), [#9](https://github.com/wstein/flixw-mutate/issues/9), [spike PR #12](https://github.com/wstein/flixw-mutate/pull/12)):** (1) Datalog hook: route (a), bytecode rewrite of `Solver.runSolverInternal` in the compiled program, is built first; the spike recommended route (b), and the owner chose (a). (2) Option 4 timeouts: one worker JVM per run, reused until the first timeout, then restarted. (3) Datalog rules are addressed by canonical rule text plus solve number, not by index over all solves. The release order of option 6 and option 4 stays open ([#9](https://github.com/wstein/flixw-mutate/issues/9)); the engine is not commissioned before the spike PR is merged.
+
 ## What decides the design
 
 Reviewed: [flix/flix](https://github.com/flix/flix) at commit `99509a9` (HEAD on 5 Nov 2026), [wstein/flixw](https://github.com/wstein/flixw), [wstein/flixw-metrics](https://github.com/wstein/flixw-metrics), and [PITest](https://pitest.org).
@@ -36,7 +38,7 @@ Options 6 and 4 reach top value at moderate effort; PITest scores lowest on valu
 4. **Mutant schemata — 9/10. Recommended for functional code.** Rewrite each site as `if (Mutant.on(17)) mutated else original`; both branches share a type, so it still type-checks. Compile once, load the `LoadedProgram` once, then per mutant set a static flag and rerun `program.tests` with a timeout. `Mutant.on` reads Java state, so it needs an `unsafe IO { … }` wrapper, which the stdlib itself uses in `Solver.flix`. Expect roughly 10–100× faster than options 2 and 3. Caveat: the switches change inlining, which can affect timeouts but not results. Decided: will be implemented.
 5. **Mutation phase upstream in the compiler — 6/10.** Technically cleanest: a phase after Typer that emits the schemata. But it depends on the Flix maintainers wanting it. Not pursued: upstream changes are not expected to be accepted for now.
 6. **Datalog mutation at the solver — 9/10. The answer for Datalog.** Hook `Solver.runSolverInternal` and rewrite the `Constraint` vector before solving: drop a rule or a body atom, negate or un-negate an atom, swap head variables, delete or flip a guard, drop facts. One compile, unlimited mutants. The first step of the 5 Nov decision; the release order relative to option 4 is open ([#9](https://github.com/wstein/flixw-mutate/issues/9), see [Plan](#plan)).
-    - A negation mutant can make the program unstratifiable; the Stratifier rejects it at run time. Classify that as *invalid*, not *killed*.
+    - A negation mutant can make the program unstratifiable. The compiler checks stratification at compile time through the type of the constraint expression, but that check cannot see a program changed after compilation. Fixpoint3's run-time stratifier in 0.79.0 adds an edge for every body atom, ignores the polarity and does not reject such a program; with the hook's own check off, the negated mutant ran to a wrong model that a test caught (spike PR #12, `spikes/solver-hook/README.md`, finding 5). The hook has to check for a negated atom on a dependency cycle itself, and the engine classifies such a mutant as *invalid*, not *killed*.
     - Weak mutation comes free: if the mutant's model differs from the original but no test fails, the tests never observe that relation. Identical models mean the mutant is equivalent, so it is excluded automatically.
     - Use `DatalogGraph` to prioritise rules inside recursive predicate groups, where the bugs live.
 7. **Datalog rule-firing coverage — 8/10.** Fixpoint3 already has provenance (`runSolverWithProvenance`, `ProvenanceReconstruct`), so you can report which rules ever derived a fact during the suite. Cheap, and a prerequisite for option 6: a rule that never fires can't be killed. Fits flixw-metrics as e.g. `datalogRulesUnexercised`.
@@ -52,15 +54,17 @@ Options 6 and 4 reach top value at moderate effort; PITest scores lowest on valu
 
 The order of option 6 and option 4 is open ([#9](https://github.com/wstein/flixw-mutate/issues/9)). Everything runs against unmodified, pinned Flix compilers; upstream pull requests are off the table for now and are revisited only once corpus data exists.
 
-- [ ] Spike: hook `Solver.runSolverInternal` without changing Flix, testing both routes below on the currently pinned compiler
+- [ ] Spike: hook `Solver.runSolverInternal` without changing Flix, testing both routes below on the currently pinned compiler (done in [spike PR #12](https://github.com/wstein/flixw-mutate/pull/12), pending merge; both routes work on 0.79.0)
 - [ ] Option 6: Datalog mutation at the solver, shipped as `./flixw mutate`
 - [ ] Option 7: rule-firing coverage from the same hook
 - [ ] Option 9: PIT-format `mutations.xml` from whichever release ships mutants first
-- [ ] Option 4: mutant schemata for functional code; to be implemented, order relative to option 6 open, tracked in [#9](https://github.com/wstein/flixw-mutate/issues/9)
+- [ ] Option 4: mutant schemata for functional code; to be implemented, order relative to option 6 open, tracked in [#9](https://github.com/wstein/flixw-mutate/issues/9). Timeout decision (10 Nov 2026): one worker JVM per run, reused until the first timeout, then restarted.
 
 ## Hooking the solver without upstream changes
 
-With no hook in Flix, it has to come from outside the compiler. Both routes are unverified and run only inside the plugin's JVM; the user's project and installed compiler stay untouched.
+With no hook in Flix, it has to come from outside the compiler. Both routes run only inside the plugin's JVM; the user's project and installed compiler stay untouched. The spike worked both on Flix 0.79.0 with the stock `flix.jar` (spike PR #12); whether they survive inside a flixw plugin JVM was not run.
+
+**Decision (10 Nov 2026):** route (a), the bytecode rewrite, is built first. The spike recommended route (b), patched library source, as the first adapter; the owner chose (a). Route (b) stays documented in the spike as the alternative. Rules are addressed by canonical rule text plus solve number, because the Datalog value carries no source position and an index over all solves is not stable.
 
 | Route | How it works | Risk |
 | --- | --- | --- |
@@ -157,7 +161,7 @@ The project runs `./flixw`, which loads both plugins; only the SDK's `flix-bridg
 
 ## Open questions
 
-- Which hook route works on the pinned compiler: bytecode rewrite or patched library source?
+- Which hook route works on the pinned compiler: both work on 0.79.0 (spike PR #12); route (a) is built first (decision of 10 Nov 2026). Open: whether the routes survive inside a flixw plugin JVM.
 - Which of the twelve compiler versions flixw-metrics accepts also pass the solver smoke test, and so form the initial allowlist?
 - Without a public test-runner API: run single tests through the internal `Tester` classes, or whole suites per mutant?
 - Does the `Mutant.on` switch for option 4 type-check under the current effect system?
