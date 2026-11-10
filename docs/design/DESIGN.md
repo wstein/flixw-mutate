@@ -137,6 +137,8 @@ Capabilities: an adapter implements capabilities (`Metrics`, `ProgramLoader`, `T
 
 Boundaries: the stable model is the only `flix-bridge` API plugins see; besides it they use `kit`; rules, operators, engine and report formats stay in the plugins. Supported compiler versions are data in `versions.json` with the digest of each compiler JAR; the plugin reads `flixVersion` from `FLIXW_COMPILER_VERSION`. The SDK ships as a release asset with SHA-256, pinned by version and digest and embedded in each plugin; publishing stays an owner approval.
 
+Until the first release asset exists, `flixw-mutate` pins the SDK source: `sdk-source.properties` records the repository, a full commit SHA and `module=kit`; `FLIXW_SDK_SOURCE` names a clean checkout at that SHA, verified byte for byte against the pinned Git blobs before packaging. `kit` is embedded in the one plugin JAR, and the report header names the plugin version, the pinned SDK revision and the `flixVersion`. The digest pin of the release asset replaces the commit pin when the asset is published.
+
 Constraint: there is no access to the Flix repository and no upstream change is expected. Everything runs against unmodified stock compilers, and per-capability linkage checks are the only protection against compiler changes.
 
 ## Repository layout
