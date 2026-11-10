@@ -80,6 +80,22 @@ public final class FlixHost {
     /** Result of one test: FAIL is a failed Flix assertion, ERROR any other throwable. */
     public record TestResult(String name, Outcome outcome, String detail, Throwable error, long nanos) {}
 
+    /** Flags of tasks that timed out; a flag turns false when the task has really ended. */
+    private static final List<java.util.concurrent.atomic.AtomicBoolean> ABANDONED =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /**
+     * Waits up to {@code ms} for the tasks that timed out to end and returns how many still run. Nothing stops
+     * them but their own code: there is no Thread.stop in JDK 21.
+     */
+    public static int awaitAbandoned(long ms) {
+        long end = System.nanoTime() + ms * 1_000_000;
+        while (ABANDONED.stream().anyMatch(java.util.concurrent.atomic.AtomicBoolean::get) && System.nanoTime() < end) {
+            try { Thread.sleep(5); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+        }
+        return (int) ABANDONED.stream().filter(java.util.concurrent.atomic.AtomicBoolean::get).count();
+    }
+
     private static final ExecutorService POOL = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "flix-test");
         t.setDaemon(true);
@@ -93,12 +109,17 @@ public final class FlixHost {
      */
     public static TestResult runOne(String name, Runnable fn, long timeoutMs) {
         long t0 = System.nanoTime();
-        Future<?> f = POOL.submit(() -> { fn.run(); return null; });
+        java.util.concurrent.atomic.AtomicBoolean running = new java.util.concurrent.atomic.AtomicBoolean(true);
+        Future<?> f = POOL.submit(() -> {
+            try { fn.run(); } finally { running.set(false); }
+            return null;
+        });
         try {
             f.get(timeoutMs, TimeUnit.MILLISECONDS);
             return new TestResult(name, Outcome.PASS, "", null, System.nanoTime() - t0);
         } catch (TimeoutException e) {
             f.cancel(true);
+            ABANDONED.add(running);
             return new TestResult(name, Outcome.TIMEOUT, "> " + timeoutMs + " ms", null, System.nanoTime() - t0);
         } catch (ExecutionException e) {
             Throwable c = e.getCause();

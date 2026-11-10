@@ -8,7 +8,7 @@
 set -eu
 umask 022
 rev=36d923ca325dc466b28c63419667e6026a80f920
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 [ "$#" -eq 1 ] || { echo "usage: fetch-flix-material.sh <target-dir>" >&2; exit 2; }
 dir=$1
 if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi
