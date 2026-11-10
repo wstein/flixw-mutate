@@ -5,7 +5,9 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 jar=${1:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
 version=${2:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
 work=$(mktemp -d "${TMPDIR:-/tmp}/mutate plugin.XXXXXX")
-trap 'rm -rf "$work"' EXIT INT TERM
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 revision=$(awk -F= '$1 == "revision" {print $2}' "$root/sdk-source.properties")
 java_home=$(dirname "$(dirname "$(command -v java)")")
 checks=0
@@ -55,5 +57,5 @@ contains err 'unknown argument: one'
 run 0 --version FLIXW_ABI_VERSION=1
 contains out "flixw-mutate plugin=$version sdk=$revision"
 run 0 --help FLIXW_ABI_VERSION=1
-contains out 'usage:'
+contains out 'usage: ./flixw mutate [--help | --version]'
 printf 'test-plugin: %s passed, 0 failed\n' "$checks"

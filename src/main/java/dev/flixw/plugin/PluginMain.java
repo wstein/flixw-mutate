@@ -18,7 +18,7 @@ public final class PluginMain {
             if (!"1".equals(environment.get("FLIXW_ABI_VERSION")))
                 throw new Usage("requires flixw ABI version 1");
             if (args.length == 1 && "--help".equals(args[0])) {
-                System.out.println("usage: ./flixw mutate [args...]");
+                System.out.println("usage: ./flixw mutate [--help | --version]");
                 return ExitCodes.SUCCESS;
             }
             if (args.length == 1 && "--version".equals(args[0])) {
