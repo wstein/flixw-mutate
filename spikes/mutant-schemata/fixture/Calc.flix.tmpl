@@ -1,0 +1,28 @@
+// Synthetic functional fixture for the mutant-schemata spike (flixw-mutate#1 part 2, #9).
+// A mutation site is written @{id|original|mutated}@. The engine renders three programs from it:
+// the original, the schemata program (every site becomes `if (Mutant.on(id)) (mutated) else (original)`)
+// and, for the compile-per-mutant baseline, one program per mutant with only that site replaced.
+mod Calc {
+    pub def clamp(lo: Int32, hi: Int32, x: Int32): Int32 =
+        if (@{1|x < lo|x <= lo}@) lo else if (@{2|x > hi|x >= hi}@) hi else x
+
+    pub def clampHigh(hi: Int32, x: Int32): Int32 =
+        if (@{3|x > hi|x < hi}@) hi else x
+
+    pub def sumTo(n: Int32): Int32 =
+        if (n <= 0) 0 else @{4|n + sumTo(n - 1)|n - sumTo(n - 1)}@
+
+    pub def count(n: Int32, acc: Int32): Int32 =
+        if (n <= 0) acc else count(@{5|n - 1|n + 1}@, acc + 1)
+
+    pub def firstOrZero(l: List[Int32]): Int32 = match l {
+        case x :: _ => x
+        case Nil    => @{6|0|1}@
+    }
+
+    pub def isEven(n: Int32): Bool = @{7|Int32.modulo(n, 2) == 0|Int32.modulo(n, 2) != 0}@
+
+    pub def abs2(x: Int32): Int32 = if (@{8|x < 0|x <= 0}@) -x else x
+
+    pub def label(n: Int32): String = if (n > 0) @{9|"pos"|1}@ else "neg"
+}
