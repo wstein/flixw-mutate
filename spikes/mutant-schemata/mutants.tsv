@@ -1,10 +1,11 @@
 # site	expected	note
-1	survived	x < lo vs x <= lo: at x == lo the result is lo either way (equivalent)
+1	survived	x < lo vs x <= lo: NOT equivalent (clamp(10, 0, 10) is 0 in the original and 10 in the mutant), but no test calls clamp with lo > hi
 2	survived	x > hi vs x >= hi: at x == hi the result is hi either way (equivalent)
 3	killed	clampHigh: > flipped to <
 4	killed	sumTo: n + sumTo(n-1) becomes n - sumTo(n-1)
-5	timeout	count: n - 1 becomes n + 1, the recursion does not reach 0 before the timeout
+5	timeout	count: n - 1 becomes n, the recursion never ends
 6	killed	firstOrZero of Nil returns 1
 7	killed	isEven negated
 8	survived	abs2: x < 0 vs x <= 0: at 0 both give 0 (equivalent)
 9	invalid	label: the mutated branch is an Int32 where a String is required (type error)
+10	survived	clampLow: x < lo vs not (x >= lo): equivalent for every Int32

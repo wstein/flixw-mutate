@@ -9,11 +9,14 @@ mod Calc {
     pub def clampHigh(hi: Int32, x: Int32): Int32 =
         if (@{3|x > hi|x < hi}@) hi else x
 
+    pub def clampLow(lo: Int32, x: Int32): Int32 =
+        if (@{10|x < lo|not (x >= lo)}@) lo else x
+
     pub def sumTo(n: Int32): Int32 =
         if (n <= 0) 0 else @{4|n + sumTo(n - 1)|n - sumTo(n - 1)}@
 
     pub def count(n: Int32, acc: Int32): Int32 =
-        if (n <= 0) acc else count(@{5|n - 1|n + 1}@, acc + 1)
+        if (n <= 0) acc else count(@{5|n - 1|n}@, acc + 1)
 
     pub def firstOrZero(l: List[Int32]): Int32 = match l {
         case x :: _ => x

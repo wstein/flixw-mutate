@@ -10,6 +10,11 @@ mod TestCalc {
         assertEq(expected = 10, Calc.clamp(0, 10, 10))
 
     @Test
+    def testClampLow(): Unit \ Assert =
+        assertEq(expected = 0, Calc.clampLow(0, -1));
+        assertEq(expected = 5, Calc.clampLow(0, 5))
+
+    @Test
     def testClampHigh(): Unit \ Assert =
         assertEq(expected = 3, Calc.clampHigh(3, 9));
         assertEq(expected = 2, Calc.clampHigh(3, 2))
