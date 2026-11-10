@@ -11,12 +11,15 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Read the pinned SDK revision
         id: sdk-pin
         run: echo "revision=$(awk -F= '$1 == "revision" {print $2}' sdk-source.properties)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           repository: wstein/flixw-plugin-sdk
           ref: ${{ steps.sdk-pin.outputs.revision }}
           path: .sdk-source
