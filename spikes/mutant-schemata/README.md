@@ -49,7 +49,7 @@ The survivors 2, 8, 10 are equivalent by argument (not by a model comparison; th
 - Switch plus rerun of all 9 tests: 40 runs (8 mutants that did not time out, 5 runs each), mean 1.6 ms, median 0.8 ms, min 0.2 ms, max 7.9 ms.
 - One compile per mutant (text replacement of the site, compile, load, run the tests): 8 runs, mean 1416 ms, min 1137 ms, max 1835 ms. Each outcome agrees with the schemata outcome.
 - For these 8 mutants: setup 4.4 s plus about 0.06 s of switch runs (8 x 5 x about 1.6 ms) against 8 x 1.42 s = 11.3 s (arithmetic on the numbers above); break-even at about three mutants.
-- These numbers come from one run at load average 18.8 (shared machine, not a benchmark); an earlier run of an earlier version of the fixture at load 7.4 gave switch 1.0 ms and compile-per-mutant 1457 ms.
+- These numbers come from one run at load average 18.8 (shared machine, not a benchmark); the times depend on the load: an earlier run of an earlier version of the fixture at load 7.4 gave switch 1.0 ms and compile-per-mutant 1457 ms, and the reviewer's run at load 15 gave 2.0 ms and about 5700 ms.
 
 ### The wrapper and the effect system
 
@@ -70,14 +70,14 @@ Observed (probes in the run output): when the switch is changed inside one test 
 
 - killed: an assertion failure (`java.lang.AssertionError: Assertion failed: ...`). Any other exception is reported as killed as well here; the engine does not separate "killed by a crash".
 - timeout: the call does not return within the timeout. `Thread.stop` does not exist in JDK 21, so the daemon thread is only interrupted. Site 5 is a real endless loop (`count(n, acc + 1)` with `n = 5`). Here the loop reads the switch on every iteration, so the engine resets the switch after the timeout and waits for the task to end before it measures anything else: in all 5 runs the runaway thread was gone after at most 7 ms and the engine fails the run if one is left. That works only for a loop that reads the switch; a loop that does not (an endless loop in code without a site, or a site reached only before the loop) cannot be stopped this way, and a worker JVM per run that can be killed is then needed (not built, not run). With `TIMEOUT_MS=60000 RUNS=1` site 5 is a timeout as well (`RESULT: OK`, one run, the runaway thread gone after 7 ms).
-- survived: all tests pass. With schemata the engine cannot tell an equivalent mutant from a survivor (no model comparison as in part 1); sites 1, 2 and 8 are the planted equivalents and appear as survived.
+- survived: all tests pass. With schemata the engine cannot tell an equivalent mutant from a survivor (no model comparison as in part 1); sites 2, 8 and 10 are the planted equivalents and appear as survived, like site 1, which is a real survivor (not equivalent).
 - invalid: a type error in a rewritten site breaks the single compile of the schemata program, not only that mutant. The error message names the site through a `/*S<id>*/` tag on its line; the engine removes the named sites and compiles again (here 2 compiles). The engine therefore pays one extra compile per round of invalid sites. Generating only well-typed mutants from the typed AST (as #9 plans) avoids it.
 
 The expectations were checked against a deliberately wrong engine run: `JAVA_OPTS=-Dspike.sabotage=noswitch SPIKE_WORK=... sh spikes/mutant-schemata/run.sh` never sets the switch; exit 1, `RESULT: FAIL 10 mismatches`: sites 3, 4, 5, 6 and 7 differ from the plan (`actual=survived`) and compile-per-mutant disagrees with the schemata outcome for the same five sites; sites 1, 2, 8, 9 and 10 stay as planned.
 
 ## Limits
 
-- One 9-site fixture; its compile is short, so the factor per mutant (about 1000 on the test run alone, 1457 ms against 1 ms) says little about real projects. The 10 to 100 times in the design is not checked here. `wstein/flix-invaders` was not used, as decided in #1.
+- One 10-site fixture; its compile is short, so the factor per mutant (in the recorded run 1416 ms against 1.6 ms, about 900; in the earlier run at load 7.4 1457 ms against 1.0 ms; in the reviewer's run at load 15 about 5700 ms against 2.0 ms) says little about real projects. The 10 to 100 times in the design is not checked here. `wstein/flix-invaders` was not used, as decided in #1.
 - The schemata cost with the switch off (overhead of `Mutant.on` calls) was not measured: not run.
 - Only expressions of type `Int32`, `Bool` and `String` and a `match` arm were used as sites. Sites are whole expressions (`if (...) (mutated) else (original)`); an operator inside a larger expression has to be wrapped as a whole expression, which the template does by hand. `Some`/`None`, `Ok`/`Err`, removed `do Op`, effect handlers, lattice operators: not run.
 - `Tester.run` (output formatting, per-test regex filter) and `Bootstrap` projects (`flix.toml`, dependencies) were not used; files were added with `addFile`.
