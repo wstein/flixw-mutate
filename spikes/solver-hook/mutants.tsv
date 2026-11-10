@@ -1,0 +1,12 @@
+# id	op	rule	atom	expected	note
+m01	drop-rule	0	0	killed	Reach(x) :- Start(x): nothing is reachable
+m02	drop-rule	2	0	killed	Unreach is empty
+m03	drop-rule	3	0	equivalent	rule 1 derives the same Reach facts
+m04	drop-rule	1	0	equivalent	rule 3 derives the same Reach facts (every edge end is a node)
+m05	drop-atom	3	2	equivalent	removes Node(y) from rule 3, which then equals rule 1
+m06	flip-negation	2	1	killed	Unreach(n) :- Node(n), Reach(n)
+m07	flip-negation	1	0	invalid	Reach depends negatively on Reach: not stratifiable
+m08	drop-atom	4	1	killed	Pair also contains (5,3)
+m09	drop-atom	4	2	equivalent	Reach(y) is implied by the edges from reached nodes
+m10	drop-rule	4	0	killed	Pair is empty
+m11	flip-negation	4	2	killed	Pair(x,y) :- Edge(x,y), Reach(x), not Reach(y): empty
