@@ -14,7 +14,7 @@ Does option 4 run on the pinned compiler, Flix 0.79.0 (stock `flix.jar`)?
 
 ## Method
 
-- `fixture/Calc.flix.tmpl`: nine sites written `@{id|original|mutated}@` in a small functional module; `fixture/TestCalc.flix` (8 tests); `fixture/Mutant.flix` (the switch). `mutants.tsv` holds the planted outcome per site (killed, survived because equivalent, timeout, invalid).
+- `fixture/Calc.flix.tmpl`: ten sites written `@{id|original|mutated}@` in a small functional module; `fixture/TestCalc.flix` (9 tests); `fixture/Mutant.flix` (the switch). `mutants.tsv` holds the planted outcome per site (killed, survived, timeout, invalid); a survivor is marked in its note as equivalent or not.
 - `java/dev/flixw/spike/SchemataRun.java` renders the template three ways: the original; the schemata program (every site as a switch expression); one program per mutant with only that site replaced (the baseline).
 - The compiler is used through its public Scala API from Java, with nothing but the digest-checked `flix.jar` on the class path (`../common/java/.../FlixHost.java`): `new Flix(...).addFile(...)`, `compile()` returns `Result.Ok(CompilationResult)`, `JvmLoader.load(compilationResult)` returns the `LoadedProgram`, whose `tests` map holds `TestFn` values; `TestFn.run().apply()` runs one test. `Tester.run` was not used.
 - A test counts as failed when it throws an exception whose class or message names an assertion (killed); any other exception is also reported as killed; a test that exceeds the timeout on its own daemon thread is a timeout; otherwise the mutant survived.
@@ -32,20 +32,24 @@ Environment of the recorded run (2026-11-10): Linux 7.2 aarch64 (OrbStack VM), 1
 
 ## Result: works, with the limits below
 
-`sh spikes/mutant-schemata/run.sh`: exit 0, 9 of 9 sites as planted.
+`sh spikes/mutant-schemata/run.sh`: exit 0, 10 of 10 sites as planted.
 
 | Site | Planted | Actual | Note |
 | --- | --- | --- | --- |
-| 1, 2, 8 | survived (equivalent) | survived | `<` vs `<=` where the result is the same at the boundary |
+| 2, 8, 10 | survived, equivalent | survived | `x > hi` vs `x >= hi`, `x < 0` vs `x <= 0`, `x < lo` vs `not (x >= lo)`: same result for every Int32 |
+| 1 | survived, not equivalent | survived | `x < lo` vs `x <= lo`: `clamp(10, 0, 10)` is 0 in the original and 10 in the mutant; no test calls `clamp` with `lo > hi` |
 | 3, 4, 6, 7 | killed | killed | assertion failure |
-| 5 | timeout | timeout | `count(n + 1, ...)` does not finish within 3000 ms |
+| 5 | timeout | timeout | `count(n, ...)` instead of `count(n - 1, ...)`: the recursion never ends; timeout 3000 ms |
 | 9 | invalid | invalid | mutated branch has type `Int32` where `String` is needed; the schemata compile fails |
 
-- Original program: 8 of 8 tests pass. Schemata program with the switch off: 8 of 8 pass.
-- Compile once, load once: setup (two compiles, see invalid mutants below, plus load) 3182 ms.
-- Switch plus rerun of all 8 tests: 35 runs (7 mutants that did not time out, 5 runs each), mean 1.0 ms, median 0.6 ms, min 0.1 ms, max 5.7 ms.
-- One compile per mutant (text replacement of the site, compile, load, run the tests): 7 runs, mean 1457 ms, min 1112 ms, max 1922 ms. Each outcome agrees with the schemata outcome.
-- For these 7 mutants: schemata 3.2 s setup plus about 0.04 s of switch runs (7 x 5 x about 1 ms) against 7 x 1.46 s = 10.2 s (arithmetic on the numbers above). The break-even is at about two mutants.
+The survivors 2, 8, 10 are equivalent by argument (not by a model comparison; there is none with schemata); site 1 is a real survivor that exposes a missing test.
+
+- Original program: 9 of 9 tests pass. Schemata program with the switch off: 9 of 9 pass.
+- Compile once, load once: setup (two compiles, see invalid mutants below, plus load) 4357 ms.
+- Switch plus rerun of all 9 tests: 40 runs (8 mutants that did not time out, 5 runs each), mean 1.6 ms, median 0.8 ms, min 0.2 ms, max 7.9 ms.
+- One compile per mutant (text replacement of the site, compile, load, run the tests): 8 runs, mean 1416 ms, min 1137 ms, max 1835 ms. Each outcome agrees with the schemata outcome.
+- For these 8 mutants: setup 4.4 s plus about 0.06 s of switch runs (8 x 5 x about 1.6 ms) against 8 x 1.42 s = 11.3 s (arithmetic on the numbers above); break-even at about three mutants.
+- These numbers come from one run at load average 18.8 (shared machine, not a benchmark); an earlier run of an earlier version of the fixture at load 7.4 gave switch 1.0 ms and compile-per-mutant 1457 ms.
 
 ### The wrapper and the effect system
 
@@ -60,22 +64,22 @@ mod Mutant {
 
 Without `unsafe IO` (observed, compile error): `>> Unexpected effect 'IO' in {} function.` pointing at `pub def on(n: Int32): Bool = ... System.getProperty ...`. With `on` declared `\ IO`, a site in a pure function fails with the same message at the call in `pub def f(x: Int32): Int32 = if (on(1)) 0 else x` (`'IO' used here`). So every function that contains a site stays pure only because of the `unsafe IO` inside `Mutant.on`; no signature changes.
 
-Observed consequence: inside one run, a second call of the same pure-typed function with the same arguments did not re-read the switch (probe `switch changed inside one run`: the test expected `(5, 100)` and got `(5, 5)`). The cause (inlining, common-subexpression reuse or something else) was not isolated. It is harmless for the loop here, because the switch is constant during a test run and a new run evaluates everything again (killed and survived outcomes differ between runs of the same loaded program), but a switch must not change while a test runs.
+Observed (probes in the run output): when the switch is changed inside one test run, a later call of the pure-typed function does not follow it: `f(5)` before and after the change gave `(5, 5)` where `(5, 100)` was expected, and with another argument for the second call `f(6)` gave `(5, 6)`. A nullary def and a closure follow the switch when it changes between runs (`0, 1, 0, 1` gave `g=5, 100, 5, 100` and the same for the closure), so nothing is cached across runs. The cause inside a run is not isolated (UNKNOWN); a guess is that the optimizer moves the pure-typed reads around the IO effects of the test, but that was not checked. For the loop over mutants this is not a validity problem as long as the switch stays constant while a test runs; the risk is a task that keeps running after a timeout.
 
 ### Telling the outcomes apart
 
 - killed: an assertion failure (`java.lang.AssertionError: Assertion failed: ...`). Any other exception is reported as killed as well here; the engine does not separate "killed by a crash".
-- timeout: the call does not return within the timeout. `Thread.stop` does not exist in JDK 21, so the daemon thread is only interrupted. Whether the runaway thread ends (for instance because the switch is reset and `Mutant.on` returns false) was not measured; a real engine needs a worker process or a cooperative stop.
+- timeout: the call does not return within the timeout. `Thread.stop` does not exist in JDK 21, so the daemon thread is only interrupted. Site 5 is a real endless loop (`count(n, acc + 1)` with `n = 5`). Here the loop reads the switch on every iteration, so the engine resets the switch after the timeout and waits for the task to end before it measures anything else: in all 5 runs the runaway thread was gone after at most 7 ms and the engine fails the run if one is left. That works only for a loop that reads the switch; a loop that does not (an endless loop in code without a site, or a site reached only before the loop) cannot be stopped this way, and a worker JVM per run that can be killed is then needed (not built, not run). With `TIMEOUT_MS=60000 RUNS=1` site 5 is a timeout as well (`RESULT: OK`, one run, the runaway thread gone after 7 ms).
 - survived: all tests pass. With schemata the engine cannot tell an equivalent mutant from a survivor (no model comparison as in part 1); sites 1, 2 and 8 are the planted equivalents and appear as survived.
 - invalid: a type error in a rewritten site breaks the single compile of the schemata program, not only that mutant. The error message names the site through a `/*S<id>*/` tag on its line; the engine removes the named sites and compiles again (here 2 compiles). The engine therefore pays one extra compile per round of invalid sites. Generating only well-typed mutants from the typed AST (as #9 plans) avoids it.
 
-The expectations were checked against a deliberately wrong engine run: `JAVA_OPTS=-Dspike.sabotage=noswitch SPIKE_WORK=... sh spikes/mutant-schemata/run.sh` never sets the switch; exit 1, `RESULT: FAIL 10 mismatches`: sites 3, 4, 5, 6 and 7 differ from the plan (`actual=survived`) and compile-per-mutant disagrees with the schemata outcome for sites 3, 4, 5, 6 and 7; sites 1, 2, 8 and 9 stay as planned.
+The expectations were checked against a deliberately wrong engine run: `JAVA_OPTS=-Dspike.sabotage=noswitch SPIKE_WORK=... sh spikes/mutant-schemata/run.sh` never sets the switch; exit 1, `RESULT: FAIL 10 mismatches`: sites 3, 4, 5, 6 and 7 differ from the plan (`actual=survived`) and compile-per-mutant disagrees with the schemata outcome for the same five sites; sites 1, 2, 8, 9 and 10 stay as planned.
 
 ## Limits
 
 - One 9-site fixture; its compile is short, so the factor per mutant (about 1000 on the test run alone, 1457 ms against 1 ms) says little about real projects. The 10 to 100 times in the design is not checked here. `wstein/flix-invaders` was not used, as decided in #1.
 - The schemata cost with the switch off (overhead of `Mutant.on` calls) was not measured: not run.
-- Only expressions of type `Int32`, `Bool` and `String` and a `match` arm were used as sites. `Some`/`None`, `Ok`/`Err`, removed `do Op`, effect handlers, lattice operators: not run.
+- Only expressions of type `Int32`, `Bool` and `String` and a `match` arm were used as sites. Sites are whole expressions (`if (...) (mutated) else (original)`); an operator inside a larger expression has to be wrapped as a whole expression, which the template does by hand. `Some`/`None`, `Ok`/`Err`, removed `do Op`, effect handlers, lattice operators: not run.
 - `Tester.run` (output formatting, per-test regex filter) and `Bootstrap` projects (`flix.toml`, dependencies) were not used; files were added with `addFile`.
 - The SDK has no `ProgramLoader` or `TestRunner` yet (`flix-bridge` on `feat/flix-bridge-adapters` has only the Metrics capability). The calls above are the ones such an adapter would wrap; the types involved are `ca.uwaterloo.flix.api.Flix`, `ca.uwaterloo.flix.runtime.{CompilationResult, JvmLoader, LoadedProgram, TestFn}`, `ca.uwaterloo.flix.util.Result`. Other Flix versions: not run.
 - Mutation operators here are written by hand in the template; picking sites from the typed AST: not run.
@@ -90,6 +94,6 @@ Option 4 works on 0.79.0 for the sites tried. Keep it in the plan. Before the en
 
 ## Open questions
 
-- What ends a runaway thread after a timeout; is a forked worker JVM per run acceptable?
-- What exactly makes the second call in one run reuse the first value, and does it matter for sites in code called from handlers or lazily?
+- Is a forked worker JVM per run acceptable for loops that do not read the switch?
+- What exactly makes a call after an in-run switch change keep the old value, and does it matter for sites in code called from handlers or lazily?
 - Overhead of the switch calls on a real project with the switches off: not run.
