@@ -4,6 +4,8 @@
 
 **Decision (5 Nov 2026):** start with option 6, Datalog mutation at the solver, shipped as a flixw plugin (`./flixw mutate`, this repository). We don't expect upstream changes to Flix to be accepted for now, so everything must work against unmodified Flix releases. PITest stays out.
 
+**Decision (10 Nov 2026):** option 4, mutant schemata for functional code, will be implemented ([#9](https://github.com/wstein/flixw-mutate/issues/9)). The order relative to option 6 is open.
+
 ## What decides the design
 
 Reviewed: [flix/flix](https://github.com/flix/flix) at commit `99509a9` (HEAD on 5 Nov 2026), [wstein/flixw](https://github.com/wstein/flixw), [wstein/flixw-metrics](https://github.com/wstein/flixw-metrics), and [PITest](https://pitest.org).
@@ -31,7 +33,7 @@ Options 6 and 4 reach top value at moderate effort; PITest scores lowest on valu
     - swap operands of non-commutative calls such as `++` or `-`
     - lattice `⊔` / `⊓` swaps, which matter for lattice Datalog
     - prioritise pure definitions: cheapest and most reliable to test
-4. **Mutant schemata — 9/10. Recommended for functional code.** Rewrite each site as `if (Mutant.on(17)) mutated else original`; both branches share a type, so it still type-checks. Compile once, load the `LoadedProgram` once, then per mutant set a static flag and rerun `program.tests` with a timeout. `Mutant.on` reads Java state, so it needs an `unsafe IO { … }` wrapper, which the stdlib itself uses in `Solver.flix`. Expect roughly 10–100× faster than options 2 and 3. Caveat: the switches change inlining, which can affect timeouts but not results.
+4. **Mutant schemata — 9/10. Recommended for functional code.** Rewrite each site as `if (Mutant.on(17)) mutated else original`; both branches share a type, so it still type-checks. Compile once, load the `LoadedProgram` once, then per mutant set a static flag and rerun `program.tests` with a timeout. `Mutant.on` reads Java state, so it needs an `unsafe IO { … }` wrapper, which the stdlib itself uses in `Solver.flix`. Expect roughly 10–100× faster than options 2 and 3. Caveat: the switches change inlining, which can affect timeouts but not results. Decided: will be implemented.
 5. **Mutation phase upstream in the compiler — 6/10.** Technically cleanest: a phase after Typer that emits the schemata. But it depends on the Flix maintainers wanting it. Not pursued: upstream changes are not expected to be accepted for now.
 6. **Datalog mutation at the solver — 9/10. The answer for Datalog.** Hook `Solver.runSolverInternal` and rewrite the `Constraint` vector before solving: drop a rule or a body atom, negate or un-negate an atom, swap head variables, delete or flip a guard, drop facts. One compile, unlimited mutants. Chosen as the first step (see [Plan](#plan)).
     - A negation mutant can make the program unstratifiable; the Stratifier rejects it at run time. Classify that as *invalid*, not *killed*.
@@ -54,7 +56,7 @@ Option 6 comes first. Everything runs against unmodified, pinned Flix compilers;
 - [ ] Option 6: Datalog mutation at the solver, the first release of `./flixw mutate`
 - [ ] Option 7: rule-firing coverage from the same hook
 - [ ] Option 9: PIT-format `mutations.xml` from the first release
-- [ ] Option 4: mutant schemata for functional code, once option 6 is stable
+- [ ] Option 4: mutant schemata for functional code; implemented, order relative to option 6 open, tracked in [#9](https://github.com/wstein/flixw-mutate/issues/9)
 
 ## Hooking the solver without upstream changes
 
