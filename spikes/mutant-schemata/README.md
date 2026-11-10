@@ -28,7 +28,7 @@ SPIKE_WORK=<scratch dir> sh spikes/mutant-schemata/run.sh          # RUNS=5 TIME
 
 It fetches `flix.jar` 0.79.0 (sha256 `8fad2aa09567a7edabcc43f4101fa6199131df2c22929e001c87659d764f6dcf`, `../common/fetch-flix.sh`), compiles the Java sources with JDK 21 and runs the engine. Exit 1 if a planted outcome differs or if compile-per-mutant and schemata disagree.
 
-Environment of the recorded run (2026-11-10): Linux 7.2 aarch64 (OrbStack VM), 10 CPUs, 8 GB RAM shared with other jobs (load average 7.4 before the run), Temurin 21.0.13+9, `-Xmx2g`, Flix 0.79.0.
+Environment of the recorded run (2026-11-10): Linux 7.2 aarch64 (OrbStack VM), 10 CPUs, 8 GB RAM shared with other jobs (load average 18.8 before the recorded run; 7.4 before an earlier run of an earlier fixture version, see below), Temurin 21.0.13+9, `-Xmx2g`, Flix 0.79.0.
 
 ## Result: works, with the limits below
 
