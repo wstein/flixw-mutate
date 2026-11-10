@@ -20,6 +20,8 @@ public final class SolverHookRun {
     static final long TIMEOUT_MS = Long.getLong("spike.timeout", 60_000L);
     /** Argument 8 "nocheck" turns the hook's own stratification check off to show what Fixpoint3 does alone. */
     static boolean STRATCHECK = true;
+    /** Fixture runs must reach the hook; the material run sets -Dspike.requireSolve=false (a file may have no solve). */
+    static final boolean REQUIRE_SOLVE = !"false".equals(System.getProperty("spike.requireSolve"));
 
     record Mutant(String id, String op, int rule, int atom, String expected, String note) {}
 
@@ -44,7 +46,7 @@ public final class SolverHookRun {
         long compileMs = ms(t0);
         if (route.equals("a") && scala.jdk.javaapi.CollectionConverters.asJava(cr.getClasses()).keySet().stream().noneMatch(d -> d.descriptorString().equals("LFixpoint3/Solver/Def$runSolverInternal;"))) {
             System.out.println("RESULT: NO-TARGET the compiled program has no Fixpoint3.Solver.runSolverInternal (it does not call the solver); nothing to hook");
-            return;
+            System.exit(REQUIRE_SOLVE ? 1 : 0);
         }
         scala.jdk.javaapi.CollectionConverters.asJava(cr.getClasses()).keySet().stream()
                 .map(java.lang.constant.ClassDesc::descriptorString).filter(n -> n.contains("FlixwMutate") || n.contains("Solver/Def$runSolver"))
@@ -87,7 +89,7 @@ public final class SolverHookRun {
             boolean pass = base.stream().allMatch(r -> r.outcome() == FlixHost.Outcome.PASS);
             System.out.println(pass ? "RESULT: NO-SOLVE the program has no Datalog solve of its own (queries only); nothing to mutate"
                     : "RESULT: FAIL baseline tests fail");
-            System.exit(pass ? 0 : 1);
+            System.exit(pass && !REQUIRE_SOLVE ? 0 : 1);
         }
 
         // Smoke test of the design: dropping a rule must change at least one model.
@@ -112,7 +114,8 @@ public final class SolverHookRun {
                     m.rule(), m.atom(), m.expected(), actual, match ? "ok  " : "DIFF", ms, cls[1]);
         }
         System.setProperty("flixw.op", "0");
-        System.out.println("counts: " + counts);
+        int leaked = FlixHost.awaitAbandoned(0);
+        System.out.println("counts: " + counts + (leaked > 0 ? " leakedThreads=" + leaked : ""));
         System.out.println(mismatches == 0 ? "RESULT: OK " + mutants.size() + " mutants as expected"
                 : "RESULT: FAIL " + mismatches + " mutants differ from the expectation");
         System.exit(mismatches == 0 ? 0 : 1);
@@ -134,7 +137,7 @@ public final class SolverHookRun {
         for (FlixHost.TestResult r : rs) {
             if (r.outcome() == FlixHost.Outcome.TIMEOUT) return new String[] {"timeout", r.name()};
         }
-        boolean same = baseModels.equals(mutModels);
+        boolean same = baseModels.equals(mutModels) || "samemodel".equals(System.getProperty("spike.sabotage"));
         return new String[] {same ? "equivalent" : "survived", same ? "same model in all " + mutModels.size()
                 + " solves" : "model differs, no test fails"};
     }

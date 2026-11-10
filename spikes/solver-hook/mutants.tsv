@@ -10,3 +10,4 @@ m08	drop-atom	4	1	killed	Pair also contains (5,3)
 m09	drop-atom	4	2	equivalent	Reach(y) is implied by the edges from reached nodes
 m10	drop-rule	4	0	killed	Pair is empty
 m11	flip-negation	4	2	killed	Pair(x,y) :- Edge(x,y), Reach(x), not Reach(y): empty
+m12	drop-rule	5	0	survived	Seen(x) :- Reach(x) is read by no test: the model differs, no test fails
