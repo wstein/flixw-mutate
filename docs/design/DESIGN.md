@@ -54,7 +54,7 @@ Options 6 and 4 reach top value at moderate effort; PITest scores lowest on valu
 
 The order of option 6 and option 4 is open ([#9](https://github.com/wstein/flixw-mutate/issues/9)). Everything runs against unmodified, pinned Flix compilers; upstream pull requests are off the table for now and are revisited only once corpus data exists.
 
-- [ ] Spike: hook `Solver.runSolverInternal` without changing Flix, testing both routes below on the currently pinned compiler (done in [spike PR #12](https://github.com/wstein/flixw-mutate/pull/12), pending merge; both routes work on 0.79.0)
+- [x] Spike: hook `Solver.runSolverInternal` without changing Flix, testing both routes below on the currently pinned compiler (done in [spike PR #12](https://github.com/wstein/flixw-mutate/pull/12), merge pending; both routes work on 0.79.0)
 - [ ] Option 6: Datalog mutation at the solver, shipped as `./flixw mutate`
 - [ ] Option 7: rule-firing coverage from the same hook
 - [ ] Option 9: PIT-format `mutations.xml` from whichever release ships mutants first
@@ -62,14 +62,14 @@ The order of option 6 and option 4 is open ([#9](https://github.com/wstein/flixw
 
 ## Hooking the solver without upstream changes
 
-With no hook in Flix, it has to come from outside the compiler. Both routes run only inside the plugin's JVM; the user's project and installed compiler stay untouched. The spike worked both on Flix 0.79.0 with the stock `flix.jar` (spike PR #12); whether they survive inside a flixw plugin JVM was not run.
+With no hook in Flix, it has to come from outside the compiler. Both routes are meant to run only inside the plugin's JVM; the user's project and installed compiler stay untouched. In the spike both routes worked on Flix 0.79.0 with the stock `flix.jar` (spike PR #12); inside a flixw plugin JVM they were not run, so that part is unverified.
 
-**Decision (10 Nov 2026):** route (a), the bytecode rewrite, is built first. The spike recommended route (b), patched library source, as the first adapter; the owner chose (a). Route (b) stays documented in the spike as the alternative. Rules are addressed by canonical rule text plus solve number, because the Datalog value carries no source position and an index over all solves is not stable.
+**Decision (10 Nov 2026):** route (a), the bytecode rewrite, is built first. The spike recommended route (b), patched library source, as the first adapter; the owner chose (a). Route (b) stays documented in the spike as the alternative. Rules are addressed by canonical rule text plus solve number, not by index over all solves (the spike's hook used the index; spike PR #12).
 
 | Route | How it works | Risk |
 | --- | --- | --- |
 | Bytecode rewrite at load time | The plugin loads the compiled program itself, so it controls class loading and can wrap the generated solver class so `runSolverInternal` passes the constraints through the mutator first. | Generated class and method names change between compiler versions. Guard with a per-version check in the style of `AdapterAbi` and refuse unknown versions. |
-| Patched library source | Flix compiles its standard library from source shipped in the compiler jar; the plugin substitutes a `Fixpoint3/Solver.flix` with a transform step. | Unclear whether the compiler API allows replacing a library file. The patch must be rebased for each Flix version. |
+| Patched library source | Flix compiles its standard library from source shipped in the compiler jar; the plugin substitutes a `Fixpoint3/Solver.flix` with a transform step. | The spike verified that a resource of the same path placed before `flix.jar` in the compiler's class loader replaces the library file (spike PR #12, finding 2). The patch must be rebased for each Flix version. |
 
 Rule coverage (option 7) uses the same hook, so it comes almost for free.
 
@@ -161,10 +161,10 @@ The project runs `./flixw`, which loads both plugins; only the SDK's `flix-bridg
 
 ## Open questions
 
-- Which hook route works on the pinned compiler: both work on 0.79.0 (spike PR #12); route (a) is built first (decision of 10 Nov 2026). Open: whether the routes survive inside a flixw plugin JVM.
+- Do the hook routes survive inside a flixw plugin JVM (class loaders, the `Flix` jars argument)? Not run in the spike (spike PR #12). The route itself is decided: (a) first.
 - Which of the twelve compiler versions flixw-metrics accepts also pass the solver smoke test, and so form the initial allowlist?
-- Without a public test-runner API: run single tests through the internal `Tester` classes, or whole suites per mutant?
-- Does the `Mutant.on` switch for option 4 type-check under the current effect system?
+- Without a public test-runner API: run single tests through the internal `Tester` classes, or whole suites per mutant? The spike reran `program.tests` per mutant (spike PR #12); which of the two the engine uses is not decided.
+- Answered by the schemata spike (spike PR #12): the switch type-checks with an `unsafe IO` wrapper, 10 of 10 sites behaved as planted on Flix 0.79.0. Open: a real project (flix-invaders, #9).
 
 ## Building this document
 
