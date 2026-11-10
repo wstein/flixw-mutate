@@ -5,7 +5,7 @@
 # Exit 1 if a planted site has another outcome, or if compile-per-mutant and schemata disagree.
 set -eu
 umask 022
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 common=$here/../common
 work=${SPIKE_WORK:?set SPIKE_WORK to a scratch directory}
 mkdir -p "$work"

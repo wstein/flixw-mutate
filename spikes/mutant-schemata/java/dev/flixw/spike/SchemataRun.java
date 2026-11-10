@@ -75,6 +75,7 @@ public final class SchemataRun {
 
         // 2. Per mutant: switch + rerun, `runs` times.
         int mismatches = 0;
+        int leaked = 0;
         Map<Integer, String> schemaOutcome = new TreeMap<>();
         List<Long> switchNanos = new ArrayList<>();   // runs of mutants that did not time out
         for (Site s : sites) {
@@ -93,6 +94,14 @@ public final class SchemataRun {
                     total += d;
                     String o = classify(rs);
                     if (!o.equals("timeout")) switchNanos.add(d);
+                    else {
+                        // The switch is reset above. The runaway loop reads it on every iteration, so it ends.
+                        long w = System.nanoTime();
+                        int left = FlixHost.awaitAbandoned(5000);
+                        System.out.printf("site %d run %d timed out; after the switch reset %d runaway thread(s) still run after %.0f ms%n",
+                                s.id(), r, left, (System.nanoTime() - w) / 1e6);
+                        if (left > 0) leaked += left;
+                    }
                     if (actual == null) actual = o;
                     else if (!actual.equals(o)) actual = actual + "/" + o + "(unstable)";
                 }
@@ -130,6 +139,7 @@ public final class SchemataRun {
                 perCompile.stream().mapToLong(x -> x).average().orElse(0) / 1e6,
                 perCompile.stream().mapToLong(x -> x).min().orElse(0) / 1e6,
                 perCompile.stream().mapToLong(x -> x).max().orElse(0) / 1e6);
+        if (leaked > 0) { System.out.println("runaway threads left: " + leaked); mismatches++; }
         probes(work);
         System.out.println(mismatches == 0 ? "RESULT: OK" : "RESULT: FAIL " + mismatches + " mismatches");
         System.exit(mismatches == 0 ? 0 : 1);
@@ -163,7 +173,25 @@ public final class SchemataRun {
         TreeMap<String, Runnable> t = load(List.of(), src, work.resolve("probe2"));
         var pr = FlixHost.runAll(t, 5000, List.of()).get(0);
         System.out.println("probe [switch changed inside one run]: " + pr.outcome() + " " + pr.detail()
-                + " (expected (5, 100) if the second call were re-evaluated)");
+                + " (expected (5, 100) if the second call re-read the switch)");
+        TreeMap<String, Runnable> t2 = load(List.of(), src.replace("let b = f(5);", "let b = f(6);"), work.resolve("probe2b"));
+        var pr2 = FlixHost.runAll(t2, 5000, List.of()).get(0);
+        System.out.println("probe [switch changed inside one run, second call with another argument]: " + pr2.outcome() + " " + pr2.detail());
+        // Across runs: a nullary def and a closure follow the switch when it changes between runs.
+        String src3 = head + "    def on(n: Int32): Bool =\n        Int32.fromString(unsafe IO { System.getProperty(\"flixw.mutant\", \"0\") }) |> Option.getWithDefault(0) == n\n"
+            + "    def g(): Int32 = if (on(1)) 100 else 5\n"
+            + "    def viaClosure(): Int32 = { let c = x -> if (on(1)) 100 else x; c(5) }\n"
+            + "    def put(k: String, v: Int32): Unit \\ IO = { let _ = System.setProperty(k, Int32.toString(v)); () }\n"
+            + "    @Test\n    def readBoth(): Unit \\ IO = { put(\"probe.g\", g()); put(\"probe.c\", viaClosure()) }\n}\n";
+        TreeMap<String, Runnable> t3 = load(List.of(), src3, work.resolve("probe3"));
+        StringBuilder seq = new StringBuilder();
+        for (String sw : new String[] {"0", "1", "0", "1"}) {
+            System.setProperty("flixw.mutant", sw);
+            FlixHost.runAll(t3, 5000, List.of());
+            seq.append("(g=").append(System.getProperty("probe.g")).append(",closure=").append(System.getProperty("probe.c")).append(") ");
+        }
+        System.setProperty("flixw.mutant", "0");
+        System.out.println("probe [nullary def and closure, switch 0,1,0,1 between runs]: " + seq.toString().trim());
     }
 
     enum Set0 { NONE, SCHEMATA, TEXT }
