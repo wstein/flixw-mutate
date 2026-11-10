@@ -29,9 +29,10 @@ same revision. Only `kit/src` and `kit/resources` enter `dist/plugin.jar`, with
 because the SDK has no release asset yet. Replacing it with a versioned release asset and its
 SHA-256 is a separate step.
 
-This writes `dist/plugin.jar` and `dist/SHA256SUMS`; the same source, pin and version give the
-same JAR. `sh scripts/test.sh` runs the source checks (pin guard, packaged contents, plugin
-contract, reproducibility). Publish both files as immutable release
+This writes `dist/plugin.jar` and `dist/SHA256SUMS`; the same source, pin, version and JDK give the
+same JAR (the manifest records the JDK as `Created-By`). `sh scripts/test.sh` runs the source checks (workflow pins, pin guard, packaged contents,
+plugin contract, paths with spaces, reproducibility) in a temporary directory, not in `dist/`.
+`FLIXW_MUTATE_DIST` overrides the output directory. Publish both files as immutable release
 assets, then install the JAR explicitly from a tagged release:
 
 ```sh
@@ -54,7 +55,8 @@ flixw-mutate plugin=<plugin version> sdk=<pinned SDK commit> flix=<FLIXW_COMPILE
 ```
 
 `plugin` is the JAR's `Implementation-Version`, `sdk` the revision of `sdk-source.properties`
-embedded in the JAR, `flix` the flixw ABI variable (absent without a lock: exit 2).
+embedded in the JAR, `flix` the flixw ABI variable. Without a lock the compiler variables are
+absent: exit 2. Unknown arguments are a shell error (exit 2).
 The kit's cache (`KeyedStore`) is embedded but not used yet; the mutation engine is not built.
 
 ## ABI and safety
