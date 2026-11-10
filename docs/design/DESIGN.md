@@ -55,7 +55,7 @@ The order of option 6 and option 4 is open ([#9](https://github.com/wstein/flixw
 - [ ] Spike: hook `Solver.runSolverInternal` without changing Flix, testing both routes below on the currently pinned compiler
 - [ ] Option 6: Datalog mutation at the solver, shipped as `./flixw mutate`
 - [ ] Option 7: rule-firing coverage from the same hook
-- [ ] Option 9: PIT-format `mutations.xml` from the first release
+- [ ] Option 9: PIT-format `mutations.xml` from whichever release ships mutants first
 - [ ] Option 4: mutant schemata for functional code; to be implemented, order relative to option 6 open, tracked in [#9](https://github.com/wstein/flixw-mutate/issues/9)
 
 ## Hooking the solver without upstream changes
