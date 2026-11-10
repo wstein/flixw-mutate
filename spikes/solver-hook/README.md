@@ -12,7 +12,7 @@ On the pinned compiler, Flix 0.79.0 (stock `flix.jar`, sha256 `8fad2aa09567a7eda
 
 ## Method
 
-- `fixture/`: a Datalog fixture (`ReachGraph.flix`, reachability with a negation, 5 rules; `TestReachGraph.flix`, 3 asserting tests) and `mutants.tsv`: 11 planted mutants with the expected outcome (killed 6, equivalent 4, invalid 1) and the reason.
+- `fixture/`: a Datalog fixture (`ReachGraph.flix`, reachability with a negation, 5 rules; `TestReachGraph.flix`, 3 asserting tests) and `mutants.tsv`: 12 planted mutants with the expected outcome (killed 6, equivalent 4, survived 1, invalid 1) and the reason.
 - `hook/Hook.flix`: the plugin's own Flix code. `flixwBefore` rewrites the rule vector of the solver input according to the switch (system properties `flixw.op/rule/atom`); `flixwAfter` records a canonical text of the resulting model. Both routes run this same code.
 - Route (a), `java/.../RewriteSolver.java`: after `Flix.compile()`, the bytes of `Fixpoint3/Solver/Def$runSolverInternal` in `CompilationResult.root.classes` are rewritten with ASM (the copy inside `flix.jar`, `org.objectweb.asm`): `staticApply(ZLTagged$;)Ldev/flix/runtime/Result$;` is renamed `staticApply$orig` and a new `staticApply` calls `Splice.before`, the original, and `Splice.after`. `Splice` (Java) finds the compiled `FlixwMutate.Hook` classes through the program's class loader and runs the trampolined result. The rewritten `CompilationResult` is passed to `JvmLoader.load`.
 - Route (b), `java/.../PatchSolver.java` and `Launcher.java`: `Fixpoint3/Solver.flix` is read from the jar, one anchor line (`def runSolverInternal(...) = region rc {`) is replaced by a wrapper that calls the hook around `runSolverInternal0`, and the hook body is appended inside `mod Fixpoint3.Solver`. The patched file lives in a directory that precedes `flix.jar` in a `URLClassLoader` (parent: platform loader); the compiler loads its library from that resource. Nothing in the jar changes.
@@ -30,11 +30,11 @@ Environment of the recorded runs (2026-11-10): Linux 7.2 aarch64 (OrbStack VM), 
 
 ## Result: both routes work on 0.79.0
 
-Fixture, `sh spikes/solver-hook/run.sh`: exit 0; per route `RESULT: OK 11 mutants as expected` (counts `equivalent=4, invalid=1, killed=6`). Baseline: 3 of 3 tests pass with the hook active, the hook saw 3 solves.
+Fixture, `sh spikes/solver-hook/run.sh`: exit 0; per route `RESULT: OK 12 mutants as expected` (counts `equivalent=4, invalid=1, killed=6, survived=1`). Baseline: 3 of 3 tests pass with the hook active, the hook saw 3 solves.
 
 | Mutant | Operation | Planted | Route (a) | Route (b) |
 | --- | --- | --- | --- | --- |
-| m01 | drop rule 0 | killed | killed | killed |
+| m01 | drop rule 0 (`Reach(x) :- Start(x)`) | killed | killed | killed |
 | m02 | drop rule 2 (`Unreach`) | killed | killed | killed |
 | m03 | drop rule 3 (redundant) | equivalent | equivalent | equivalent |
 | m04 | drop rule 1 (covered by rule 3) | equivalent | equivalent | equivalent |
@@ -45,14 +45,16 @@ Fixture, `sh spikes/solver-hook/run.sh`: exit 0; per route `RESULT: OK 11 mutant
 | m09 | drop atom `Reach(y)` of rule 4 | equivalent | equivalent | equivalent |
 | m10 | drop rule 4 | killed | killed | killed |
 | m11 | flip `Reach(y)` in rule 4 | killed | killed | killed |
+| m12 | drop rule 5 (`Seen`, read by no test) | survived | survived | survived |
 
 Timings from the runs while developing (fixture, load average 8 to 45): route (a) compile 6.1 to 9.5 s, rewrite 2 to 4 ms, load 37 to 90 ms; route (b) compile 6.1 to 8.5 s, load 56 to 107 ms; per mutant (rerun of the 3 tests) 14 to 125 ms. Compile times follow the machine load; they are not a benchmark. Not measured: the time of a compile without the hook on a quiet machine.
 
-The expectations were checked against deliberately wrong engine runs:
+The expectations were checked against deliberately wrong engine runs (each exits 1 in both routes):
 
 | Wrong run | Command (route b) | Exit | Deviation |
 | --- | --- | --- | --- |
-| switch never applied | `JAVA_OPTS=-Dspike.sabotage=nomutate SPIKE_WORK=... sh spikes/solver-hook/run.sh` | 1 | 7 of 11 differ (m01, m02, m06, m07, m08, m10, m11: `actual=equivalent`) |
+| switch never applied | `JAVA_OPTS=-Dspike.sabotage=nomutate SPIKE_WORK=... sh spikes/solver-hook/run.sh` | 1 | 8 of 12 differ (m01, m02, m06, m07, m08, m10, m11, m12: `actual=equivalent`) |
+| model comparison always "same" | `JAVA_OPTS=-Dspike.sabotage=samemodel SPIKE_WORK=... sh spikes/solver-hook/run.sh` | 1 | 1 differs: m12 is `equivalent`, not `survived`; the other 11 stay |
 | hook's stratification check off | `HOOK_ARGS=nocheck SPIKE_WORK=... sh spikes/solver-hook/run.sh` | 1 | 1 differs: m07 is `killed`, not `invalid` |
 
 ### Findings that shape the SolverHook contract
@@ -61,14 +63,14 @@ The expectations were checked against deliberately wrong engine runs:
 2. The library text is read from the jar resource `/src/library/Fixpoint3/Solver.flix` when the compiler starts (`ca.uwaterloo.flix.api.Library$` calls `LocalResource.get`); a resource of the same path that comes first in the compiler's class loader is used. Verified: route (b) compiles and runs with the patched file.
 3. The standard library cannot see user sources, and a module must live in a file of its own name (compile errors `Undefined name`, `Mismatched module and file`). Route (b) therefore appends the hook inside `mod Fixpoint3.Solver`; `use` and `import` lines in the middle of a module are rejected, so the hook body uses fully qualified names and the patch adds one `import java.lang.System` and `import java.util.Objects` at the top.
 4. The solver input is not always `Datalog(facts, rules)`: with `inject`ed facts it is `Join(Model, Datalog)`, and every `query` calls the solver again with `Join(Model, Datalog)` whose only rule has the head `$Result`. The hook recurses through `Join` and skips constraint sets with a `$Result` head. Before the solver numbers them, all `PredSym` ids are 0; predicates are told apart by name.
-5. Fixpoint3 in 0.79.0 does not reject an unstratifiable program at run time: `Phase.Stratifier.stratify` adds an edge for every body atom and ignores the polarity, and with the hook's check off m07 ran to a wrong model that a test caught (`killed`, no exception). The compile-time stratifier of the Flix compiler only sees literal `#{...}` expressions. The design statement "the Stratifier rejects it at run time" does not hold for 0.79.0; the engine has to check stratification itself (the hook does: a negated atom on a dependency cycle).
+5. Fixpoint3 in 0.79.0 does not reject an unstratifiable program at run time: `Phase.Stratifier.stratify` adds an edge for every body atom and ignores the polarity (`src/library/Fixpoint3/Phase/Stratifier.flix` in the jar), and with the hook's check off m07 ran to a wrong model that a test caught (`killed`, no exception). The Flix compiler does check stratification, by the type of the constraint expression, also across functions: `java -cp <classes>:flix.jar dev.flixw.spike.CompileProbe spikes/solver-hook/probe/Strat.flix` (`solve mk(true) <+> mk(false)`, one half `A(x) :- B(x), not C(x)`, the other `C(x) :- A(x)`) prints `>> The expression is not stratified. A predicate depends strongly on itself.` five times (2026-11-10). That check cannot see a program that is changed after compilation, which is what a mutant is. The design statement "the Stratifier rejects it at run time" does not hold for 0.79.0; the engine has to check stratification itself (the hook does: a negated atom on a dependency cycle).
 6. Class loading: generated classes see Java classes only through the JDK and through the jars handed to `new Flix(packages, jars, mounts)`. Route (a) failed with `NoClassDefFoundError: dev/flixw/spike/Splice` until `Splice` was passed as a jar. The compiler also resolved `dev.flix.runtime.Global` only when `flix.jar` was on the application class path; with only an isolated loader it failed with `Undefined Java class 'dev.flix.runtime.Global'`. The launcher therefore keeps `flix.jar` on the application class path as well as in the isolated loader. How `flixw-metrics` avoids this: UNKNOWN (not looked at).
 7. Dead-code removal: a hook function that no test or `main` reaches is dropped from the compiled program, and a call to a pure-typed `unsafe IO` function whose result is unused did not run (the hook counter stayed 0 until the results were used). `@DontInline` plus a used result kept the hook (route (a) uses a `@Test` that calls it; the runner skips it). The hook class is found by the exact name `FlixwMutate.Hook.Def$flixwBefore`; other specialisations of the same def carry a numeric suffix.
 8. The erased representation of a Datalog value in the bytecode is `Tagged$` (field `ordinal`) with subclasses such as `Tag$Obj$Obj` (fields `v0`, `v1`) and singleton classes for nullary cases. Mutating it from Java by reflection is possible but ties the hook to this layout; doing it in Flix (both routes here) uses the enum constructors.
 
 ### Real Flix material
 
-`sh spikes/solver-hook/run.sh material`, one JVM per file and route; the counts are identical in routes (a) and (b) in every row. Tests: baseline tests that pass with the hook active. Solves: solve calls of the program itself (queries excluded). Mutants: generated and run (cap 40 by stride, timeout 8 s).
+`sh spikes/solver-hook/run.sh material`, one JVM per file and route; the script fails if the counts line of route (a) differs from that of route (b) for a file, if a run exits with an error, or if no file reached the hook. A file without a solve of its own is a line of this table (exit 0 with `-Dspike.requireSolve=false`); in the fixture run `NO-SOLVE` and `NO-TARGET` exit 1. Tests: baseline tests that pass with the hook active. Solves: solve calls of the program itself (queries excluded). Mutants: generated and run (cap 40 by stride, timeout 30 s).
 
 | File (v0.79.0) | Tests | Solves | Mutants | Outcome counts |
 | --- | --- | --- | --- | --- |
@@ -94,7 +96,7 @@ Reading the counts: `invalid` includes mutants that make the solver or program c
 - Flix 0.79.0 only. Other versions (0.76.1 to 0.78.0 are in the same adapter family): not run.
 - Both routes need the hook logic in Flix and the Flix compiler API (`Flix`, `CompilationResult`, `JvmLoader`) through the stock jar; no change to Flix.
 - Datalog with lattices (`Latticenal`), provenance (`runSolverWithProvenance`), functional predicates and guards as mutation targets: not run; guards and functionals are only counted (`?`).
-- Mutants that loop forever: the timeout (8 s here) abandons a daemon thread; not stopped.
+- Mutants that loop forever or run long: the timeout (30 s in the material run) abandons a daemon thread; nothing stops it. The engine prints `leakedThreads=n` in the counts line when tasks were still running at the end: 2 in Test.Exp.Fixpoint.Large and in Test.Exp.Fixpoint.PQuery (tests that exceeded the timeout inside a mutant that was already classified `invalid` or `error`), 0 elsewhere. The comparison of routes (a) and (b) ignores that field.
 - Whether routes (a) and (b) survive a flixw plugin JVM (class loaders, `Flix` jars argument): not run.
 
 ## Vorschlag SolverHook (for the SDK; not implemented here)
@@ -103,10 +105,10 @@ Facts the contract needs, per Flix version, as data in `versions.json` and check
 
 | Item | 0.79.0 value |
 | --- | --- |
-| Hook target class (route a) | `Fixpoint3.Solver.Def$runSolverInternal` (JVM name `Fixpoint3/Solver/Def$runSolverInternal`), generated, not in the jar |
+| Hook target class (route a) | `Fixpoint3.Solver.Def$runSolverInternal` (JVM name `Fixpoint3/Solver/Def$runSolverInternal`). It is generated by the compile and is not in the jar, so an `AdapterAbi` check of the jar cannot see it (the same holds for check 2 in DESIGN.md); the check has to inspect the `CompilationResult` of the smoke program (class, method, descriptor) |
 | Hook target method | `staticApply`, `public static final` |
 | Descriptor | `(ZLTagged$;)Ldev/flix/runtime/Result$;` (`Z` is `withProv`, `Tagged$` the Datalog value) |
-| Library source (route b) | resource `/src/library/Fixpoint3/Solver.flix`, anchor line `    def runSolverInternal(withProv: Bool, d: Datalog): Datalog = region rc {` exactly once |
+| Library source (route b) | resource `/src/library/Fixpoint3/Solver.flix` (in the jar, so the anchor can be checked there without a compile), anchor line `    def runSolverInternal(withProv: Bool, d: Datalog): Datalog = region rc {` exactly once |
 | Types the hook reads | `Fixpoint3.Ast.Datalog.{Datalog, Constraint, BodyPredicate, HeadPredicate, Polarity}`, `Fixpoint3.Ast.Ram.RelSym`, `Fixpoint3.Ast.Shared.PredSym` |
 | Compiler API | `Flix.compile`, `CompilationResult.root.classes` / `copy`, `JvmLoader.load`, `LoadedProgram.tests` |
 | Smoke test | one rule dropped from a built-in program changes the model; baseline tests pass; hook counter greater than 0 |
