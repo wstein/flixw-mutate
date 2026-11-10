@@ -1,35 +1,41 @@
 package dev.flixw.plugin;
 
-import java.nio.file.Path;
+import dev.flixw.sdk.kit.Context;
+import dev.flixw.sdk.kit.ExitCodes;
+import dev.flixw.sdk.kit.Usage;
+import java.util.Map;
 
-/** Minimal flixw plugin entry point. */
+/** flixw plugin entry point; the shell (context, exit codes) comes from the SDK kit. */
 public final class PluginMain {
     private PluginMain() { }
 
     public static void main(String[] args) {
-        if (!"1".equals(System.getenv("FLIXW_ABI_VERSION"))) {
-            System.err.println("This plugin requires flixw ABI version 1.");
-            System.exit(2);
-        }
-        if (args.length == 1 && "--help".equals(args[0])) {
-            System.out.println("usage: ./flixw plugin <plugin-name> [args...]");
-            return;
-        }
-        if (args.length == 1 && "--version".equals(args[0])) {
-            System.out.println("example flixw plugin 0.1.0");
-            return;
-        }
-
-        Path root = Path.of(required("FLIXW_PROJECT_ROOT"));
-        // For structured input, read the short-lived JSON file named by FLIXW_CONTEXT.
-        // Its fields are additive: tolerate keys this template does not know yet.
-        System.out.println("example plugin running in " + root);
-        for (String arg : args) System.out.println(arg);
+        System.exit(run(args, System.getenv()));
     }
 
-    private static String required(String name) {
-        String value = System.getenv(name);
-        if (value == null || value.isBlank()) throw new IllegalStateException("missing " + name);
-        return value;
+    static int run(String[] args, Map<String, String> environment) {
+        try {
+            if (!"1".equals(environment.get("FLIXW_ABI_VERSION")))
+                throw new Usage("requires flixw ABI version 1");
+            if (args.length == 1 && "--help".equals(args[0])) {
+                System.out.println("usage: ./flixw mutate [args...]");
+                return ExitCodes.SUCCESS;
+            }
+            if (args.length == 1 && "--version".equals(args[0])) {
+                System.out.println(Header.line(Header.pluginVersion(), Header.sdkRevision(), null));
+                return ExitCodes.SUCCESS;
+            }
+            Context context = Context.read(environment);
+            // flixVersion comes from the flixw ABI, not from lock.toml. It is absent without a lock.
+            String flix = environment.get("FLIXW_COMPILER_VERSION");
+            if (flix == null || flix.isBlank())
+                throw new Usage("missing FLIXW_COMPILER_VERSION (the project has no lock)");
+            System.out.println(Header.line(Header.pluginVersion(), Header.sdkRevision(), flix));
+            System.out.println("project root: " + context.projectRoot());
+            return ExitCodes.SUCCESS;
+        } catch (Usage failure) {
+            System.err.println("flixw-mutate: " + failure.getMessage());
+            return ExitCodes.ERROR;
+        }
     }
 }
