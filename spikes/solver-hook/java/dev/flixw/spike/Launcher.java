@@ -13,10 +13,13 @@ import java.util.zip.ZipFile;
 
 /**
  * Starts {@link SolverHookRun} in an isolated class loader that holds the stock flix.jar and, for route
- * (b), a directory with the patched {@code src/library/Fixpoint3/Solver.flix} in front of the jar. This is
- * the way a plugin would run: no change to the application class path, the compiler jar untouched.
+ * (b), a directory with the patched {@code src/library/Fixpoint3/Solver.flix} in front of the jar; the
+ * compiler jar itself is untouched. The launcher still needs flix.jar on the application class path (run.sh
+ * does that): the compiler resolves Java classes such as dev.flix.runtime.Global through the system loader
+ * (README, finding 6).
  *
- * Usage: Launcher a|b <flix.jar> <classes-dir> <work-dir> <fixture-dir> <mutants.tsv> <hook.flix>
+ * Usage: Launcher a|b <flix.jar> <classes-dir> <work-dir> <fixture-dir> <mutants.tsv|auto> <hook.flix>
+ *                 [nocheck|-] [support.jar]   (arguments 8 and 9; the support jar is needed by route a)
  */
 public final class Launcher {
     public static void main(String[] args) throws Exception {
