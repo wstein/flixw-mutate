@@ -6,17 +6,32 @@ The rest of this README is the plugin template it was created from.
 
 ## flixw Java plugin template
 
-A small, dependency-free starting point for a third-party
+A small starting point with no third-party dependency for a third-party
 [flixw](https://github.com/wstein/flixw) plugin. It produces one executable Java 21 JAR
 and consumes flixw ABI version 1.
 
 ## Build
 
+The plugin embeds the SDK module `kit` from the exact source revision in
+`sdk-source.properties` (`repository`, full `revision`, `module=kit`). Clone that
+repository, check out the `revision`, and point `FLIXW_SDK_SOURCE` at the checkout root:
+
 ```sh
+export FLIXW_SDK_SOURCE=/path/to/flixw-plugin-sdk   # clean checkout at the pinned revision
 sh scripts/package.sh 0.1.0
 ```
 
-This writes `dist/plugin.jar` and `dist/SHA256SUMS`. Publish both as immutable release
+`scripts/check-sdk-source.sh` runs first and fails on a wrong HEAD, a missing path, tracked,
+untracked or ignored changes under `kit/src` and `kit/resources`, or consumed bytes that differ
+from the pinned Git blobs. There is no download or sibling-checkout fallback; CI checks out the
+same revision. Only `kit/src` and `kit/resources` enter `dist/plugin.jar`, with
+`META-INF/LICENSE-flixw-plugin-sdk`; no SDK JAR is needed at run time. The pin names a commit
+because the SDK has no release asset yet. Replacing it with a versioned release asset and its
+SHA-256 is a separate step.
+
+This writes `dist/plugin.jar` and `dist/SHA256SUMS`; the same source, pin and version give the
+same JAR. `sh scripts/test.sh` runs the source checks (pin guard, packaged contents, plugin
+contract, reproducibility). Publish both files as immutable release
 assets, then install the JAR explicitly from a tagged release:
 
 ```sh
@@ -27,6 +42,20 @@ assets, then install the JAR explicitly from a tagged release:
 
 The install records the exact build in the project's `.flixw/lock.toml` when one exists.
 That record chooses an already-installed artifact; it never downloads a plugin by itself.
+
+## Shell and report header
+
+`PluginMain` uses the kit for the flixw context (`Context`), the shared exit codes
+(`ExitCodes`: 0 success, 1 policy finding, 2 shell or context error) and `Usage` errors. A run
+prints a header with the three version levels:
+
+```text
+flixw-mutate plugin=<plugin version> sdk=<pinned SDK commit> flix=<FLIXW_COMPILER_VERSION>
+```
+
+`plugin` is the JAR's `Implementation-Version`, `sdk` the revision of `sdk-source.properties`
+embedded in the JAR, `flix` the flixw ABI variable (absent without a lock: exit 2).
+The kit's cache (`KeyedStore`) is embedded but not used yet; the mutation engine is not built.
 
 ## ABI and safety
 
