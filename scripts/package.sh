@@ -10,11 +10,23 @@ version=${1:?usage: sh scripts/package.sh <version>}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 sdk=$(sh "$root/scripts/check-sdk-source.sh")
 dist=${FLIXW_MUTATE_DIST:-$root/dist}
+# The @argfiles below hold one quoted path per line, so a newline in a path cannot be represented.
+nl='
+'
+case $root$sdk$dist in
+  *"$nl"*) echo 'package: a newline in the repository, SDK or output path is not supported' >&2; exit 2 ;;
+esac
+# Absolute, because the jar steps run after a cd.
+mkdir -p "$dist"
+dist=$(CDPATH= cd -- "$dist" && pwd -P)
 work=$dist/work
 classes=$work/classes
 sources=$work/sources.txt
 entries=$work/entries.txt
 
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 rm -rf "$work"
 mkdir -p "$classes"
 # javac and jar read an @argfile with whitespace separation unless a path is quoted, so every
