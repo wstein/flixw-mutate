@@ -3,7 +3,9 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT INT TERM
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$work/sdk/kit/src" "$work/sdk/kit/resources"
 git -C "$work/sdk" init -q
 # The owner permits fixed identity only inside temporary test fixtures.
