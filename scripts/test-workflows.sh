@@ -13,17 +13,27 @@ check_dir() {
   for file in "$1"/*.yml "$1"/*.yaml; do
     [ -f "$file" ] || continue
     count=$(awk -v name="${file##*/}" '
+      function fail(msg) { printf "test-workflows: %s:%d %s\n", name, NR, msg > "/dev/stderr"; bad = 1 }
       function finish() {
-        if (open && !persist) { printf "test-workflows: %s:%d checkout lacks persist-credentials: false\n", name, line > "/dev/stderr"; bad = 1 }
-        open = 0
+        if (open && !persist) { printf "test-workflows: %s:%d checkout lacks persist-credentials: false under with:\n", name, line > "/dev/stderr"; bad = 1 }
+        open = 0; with = 0
       }
       { text = $0; sub(/[ \t]#.*$/, "", text); sub(/^[ \t]*#.*$/, "", text) }
+      text ~ /^[ \t]*$/ { next }
+      { indent = match(text, /[^ ]/) - 1 }
       text ~ /^ *- / { finish() }
+      # Forms this check does not parse are errors, not passes.
+      text ~ /["'\'']uses["'\'']:/ { fail("quoted uses: key is not supported"); next }
+      tolower(text) ~ /uses:[ \t]*[>|]/ { fail("block scalar after uses: is not supported"); next }
+      tolower(text) ~ /uses:[ \t]*$/ { fail("uses: without a value on its line is not supported"); next }
       tolower(text) ~ /uses:[ \t]*["'\'']?actions\/checkout/ {
-        open = 1; persist = 0; line = NR; n++
-        if (text !~ /@[0-9a-f]{40}["'\'']?[ \t]*$/) { printf "test-workflows: %s:%d checkout is not pinned to a 40-hex commit\n", name, NR > "/dev/stderr"; bad = 1 }
+        open = 1; persist = 0; with = 0; line = NR; n++
+        if (text !~ /@[0-9a-f]{40}["'\'']?[ \t]*$/) fail("checkout is not pinned to a 40-hex commit")
+        next
       }
-      text ~ /persist-credentials:[ \t]*["'\'']?false["'\'']?[ \t]*$/ { persist = 1 }
+      open && text ~ /^[ \t]*with:[ \t]*$/ { with = 1; with_indent = indent; next }
+      with && indent <= with_indent { with = 0 }
+      with && text ~ /^[ \t]*persist-credentials:[ \t]*["'\'']?false["'\'']?[ \t]*$/ { persist = 1 }
       END { finish(); print n + 0; exit bad }
     ' "$file") || return 1
     found=$((found + count))
@@ -51,6 +61,10 @@ fixture comment-only no "$(good | sed 's|persist-credentials|# persist-credentia
 fixture true no "$(good | sed 's|false|true # false|')" w.yml
 fixture quoted no "$(good | sed "s|uses: actions/checkout@$sha # v7|uses: \"actions/checkout@v4\"|")" w.yml
 fixture quoted-pinned yes "$(good | sed "s|uses: actions/checkout@$sha # v7|uses: \"actions/checkout@$sha\"|")" w.yml
+fixture persist-under-env no "$(good | sed 's|        with:|        env:|')" w.yml
+fixture persist-after-with no "$(good | sed 's|          persist-credentials: false|          repository: x\n        env:\n          persist-credentials: false|')" w.yml
+fixture block-scalar no "$(good | sed "s|uses: actions/checkout@$sha # v7|uses: >-\n          actions/checkout@v4|")" w.yml
+fixture quoted-key no "$(good | sed "s|uses: actions/checkout@$sha # v7|\"uses\": actions/checkout@v4|")" w.yml
 fixture uppercase no "$(good | sed "s|actions/checkout@$sha|Actions/checkout@v4|")" w.yml
 fixture short-sha no "$(good | sed "s|$sha|3d3c42e|")" w.yml
 printf 'test-workflows: %s passed, 0 failed\n' "$checks"
