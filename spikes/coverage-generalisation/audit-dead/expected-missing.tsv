@@ -1,0 +1,9 @@
+id	kind	file	line	function	class	cause
+1	ENTRY	src/Cold.flix	5	Cold.helper	DEAD_ENTRY	no class Def$helper; callers all dropped: Cold.top
+2	THEN	src/Cold.flix	6	Cold.helper	IN_DEAD	no class Def$helper; callers all dropped: Cold.top
+3	ELSE	src/Cold.flix	6	Cold.helper	IN_DEAD	no class Def$helper; callers all dropped: Cold.top
+4	ENTRY	src/Cold.flix	8	Cold.top	DEAD_ENTRY	no class Def$top; no caller
+5	LAMBDA	src/Cold.flix	9	Cold.top	IN_DEAD	no class Def$top; no caller
+6	ENTRY	src/Cold.flix	11	Cold.scale	DEAD_ENTRY	no class Def$scale; callers all dropped: Cold.knobs
+7	LAMBDA	src/Cold.flix	15	Cold.knobs	IN_DEAD	no class Def$knobs; no caller
+8	LAMBDA	src/Cold.flix	18	Cold.knobs	IN_DEAD	no class Def$knobs; no caller

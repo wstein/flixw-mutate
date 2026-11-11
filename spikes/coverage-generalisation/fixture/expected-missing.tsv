@@ -1,0 +1,2 @@
+id	kind	file	line	function	class	cause
+26	ENTRY	src/Grade.flix	37	Grade.unused	DEAD_ENTRY	no class Def$unused; no caller
