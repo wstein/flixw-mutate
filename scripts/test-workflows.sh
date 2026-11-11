@@ -83,6 +83,17 @@ fixture() {
   [ "$ok" = "$2" ] || { echo "test-workflows: fixture $1: accepted=$ok, expected $2 ($out)" >&2; exit 1; }
   checks=$((checks + 1))
 }
+# fixture_says <name> <step lines> <message>: the check must fail and say <message>. Rules that another
+# rule also catches (a missing persist-credentials, say) only show up through their own message.
+fixture_says() {
+  mkdir -p "$work/$1"
+  printf '%s%s\n' "$head_" "$2" > "$work/$1/w.yml"
+  if out=$(check_dir "$work/$1" 2>&1); then
+    echo "test-workflows: fixture $1: accepted, expected the message: $3" >&2; exit 1
+  fi
+  case $out in *"$3"*) ;; *) echo "test-workflows: fixture $1: expected the message \"$3\", got: $out" >&2; exit 1 ;; esac
+  checks=$((checks + 1))
+}
 u="      - uses: actions/checkout@$sha"
 w='        with:'
 p='          persist-credentials: false'
@@ -187,4 +198,32 @@ $p
       - uses: actions/checkout@v4
 $w
 $p"
+fixture with-prefixed-key no "$u
+        without:
+$p"
+fixture_says tab-in-comment "$u
+$w
+$p$tab# c" "tab in a checkout step"
+fixture_says line-without-colon "$u
+$w
+$p
+          no colon here" "unsupported line in a checkout step"
+fixture_says with-scalar "$u
+        with: x
+$p" "with: must open a block"
+fixture_says step-level-anchor "$u
+        name: &x y
+$w
+$p" "unsupported value for name"
+fixture_says with-level-anchor "$u
+$w
+$p
+          ref: &x main" "unsupported value for ref"
+fixture_says persist-true-alone "$u
+$w
+          persist-credentials: true" "persist-credentials is not false"
+fixture_says nesting-three-spaces "$u
+$w
+$p
+         ref: main" "unsupported nesting in a checkout step"
 printf 'test-workflows: %s passed, 0 failed\n' "$checks"
