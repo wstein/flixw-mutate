@@ -130,8 +130,14 @@ public final class DatalogCoverage {
             fixture.getFileName(), kindCount, equal, probeLabel, differ);
         out.printf("summary %s: run time over the mutants: full %d ms, selected %d ms; test executions: full %d, selected %d%n",
             fixture.getFileName(), fullNs / 1_000_000, selNs / 1_000_000, fullRuns, selRuns);
-        out.println(differ == 0 ? "RESULT: OK" : "RESULT: FAIL " + differ + " different");
-        System.exit(differ == 0 ? 0 : 1);
+        // Consistency: every generated mutant comes from a solve of some test, so only the probe may be unreached,
+        // and the distribution covers every mutant run.
+        int histSum = hist.values().stream().mapToInt(x -> x).sum();
+        int unreachedReal = hist.getOrDefault(0, 0);
+        boolean ok = differ == 0 && histSum == real && unreachedReal == 0;
+        out.println(ok ? "RESULT: OK" : "RESULT: FAIL " + differ + " different, distribution covers " + histSum + " of " + real
+            + ", unreached " + unreachedReal);
+        System.exit(ok ? 0 : 1);
     }
 
     /** True if one solve of the test has the rule (and for an atom mutant the body atom). */
