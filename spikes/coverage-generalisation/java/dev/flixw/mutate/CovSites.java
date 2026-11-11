@@ -16,9 +16,10 @@ final class CovSites {
 
     /**
      * A region with its marker id. {@code line}: the line of the construct (def line for ENTRY, line of the
-     * if/match for branches, line of the lambda). {@code index}: branch number within the construct.
+     * if/match for branches, line of the lambda). {@code index}: branch number within the construct. {@code owner}: the symbol
+     * of the def the region belongs to (also when the def has no entry region of its own).
      */
-    record Region(int id, Kind kind, String file, int start, int end, int line, int endLine, int index, String name) {}
+    record Region(int id, Kind kind, String file, int start, int end, int line, int endLine, int index, String name, String owner) {}
 
     /** The start of one expression: where lines come from. */
     record Exec(String file, int offset, int line) {}
@@ -27,6 +28,11 @@ final class CovSites {
     final List<Exec> execs = new ArrayList<>();
     /** Count of typed-AST expression node classes inside the files' defs, for the construct inventory. */
     final Map<String, Integer> nodeCounts = new java.util.TreeMap<>();
+    /** Symbols of the defs of the checked files. */
+    final java.util.Set<String> defs = new java.util.TreeSet<>();
+    /** Call graph of the checked files: def symbol to the def symbols it applies. */
+    final Map<String, java.util.Set<String>> calls = new java.util.TreeMap<>();
+    private String owner = "";
 
     private final FlixApi api;
     private final Map<String, String> files;
@@ -59,7 +65,7 @@ final class CovSites {
         regions.sort(Comparator.comparing(Region::file).thenComparingInt(Region::start).thenComparing(r -> -r.end())
             .thenComparing(r -> r.kind().ordinal()).thenComparingInt(Region::index));
         List<Region> sorted = new ArrayList<>();
-        for (Region r : regions) sorted.add(new Region(sorted.size() + 1, r.kind(), r.file(), r.start(), r.end(), r.line(), r.endLine(), r.index(), r.name()));
+        for (Region r : regions) sorted.add(new Region(sorted.size() + 1, r.kind(), r.file(), r.start(), r.end(), r.line(), r.endLine(), r.index(), r.name(), r.owner()));
         regions.clear();
         regions.addAll(sorted);
     }
@@ -91,7 +97,7 @@ final class CovSites {
         int e = SiteFinder.offset(text, line(loc, true), (Integer) FlixApi.call(loc, "endCol"));
         if (s < 0 || e < s) return;
         if (!balanced(text.substring(s, e))) { skipped++; return; }
-        regions.add(new Region(nextId++, kind, file, s, e, line, line(loc, true), index, name));
+        regions.add(new Region(nextId++, kind, file, s, e, line, line(loc, true), index, name, owner));
     }
 
     /**
@@ -134,12 +140,18 @@ final class CovSites {
             Object loc = FlixApi.call(node, "loc");
             String f = real(loc) ? fileOf(loc) : null;
             if (f != null) {
+                owner = String.valueOf(FlixApi.call(node, "sym"));
+                defs.add(owner);
                 region(Kind.ENTRY, f, FlixApi.call(node, "exp"), line(loc, false), 0, name(String.valueOf(FlixApi.call(node, "sym")), line(loc, false)));
                 file = f;
             } else {
                 file = null;
+                owner = "";
             }
-        } else if (file != null && name.startsWith("TypedAst$Expr$")) {
+        } else if (file != null && name.equals("TypedAst$Expr$ApplyDef") && !owner.isEmpty()) {
+            calls.computeIfAbsent(owner, k -> new java.util.TreeSet<>()).add(String.valueOf(FlixApi.call(FlixApi.call(node, "symUse"), "sym")));
+        }
+        if (file != null && name.startsWith("TypedAst$Expr$")) {
             Object loc = FlixApi.call(node, "loc");
             if (real(loc) && file.equals(fileOf(loc))) {
                 String text = files.get(file);
