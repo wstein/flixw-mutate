@@ -10,6 +10,9 @@ import java.util.TreeMap;
 final class CovFormats {
     private CovFormats() {}
 
+    /** Counter-probe: a partly hit line is written as not hit (must fail the format check of run.sh). */
+    static final boolean DAP = "dap".equals(System.getProperty("cov.sabotage"));
+
     /** One LCOV record per file; {@code tn} is the test name (may be empty). {@code rel} maps a source name to its report path. */
     static String lcov(CovModel m, BitSet hit, String tn, Map<String, String> rel) {
         StringBuilder sb = new StringBuilder();
@@ -36,7 +39,7 @@ final class CovFormats {
             sb.append("BRF:").append(brf).append("\nBRH:").append(brh).append('\n');
             int lf = 0, lh = 0;
             for (var e : m.lines(f, hit).entrySet()) {
-                int h = e.getValue() == 'M' ? 0 : 1; // LCOV cannot say "partly"; BRDA carries the rest
+                int h = e.getValue() == 'M' || (DAP && e.getValue() == 'P') ? 0 : 1; // LCOV cannot say "partly"; BRDA carries the rest
                 sb.append("DA:").append(e.getKey()).append(',').append(h).append('\n');
                 lf++;
                 lh += h;

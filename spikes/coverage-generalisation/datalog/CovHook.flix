@@ -8,7 +8,7 @@
 //   flixw.cov.N.facts         count of facts; flixw.cov.N.fact.J  text of fact J (a constraint without a body)
 //   flixw.cov.N.derived       (not with -Dflixw.covcfg.noprov=1, nor with lattice predicates) counts per rule, "edb,r0,r1,...": model tuples whose first derivation is that rule
 //                             (edb: tuples of the facts and of an injected model), from a second solve with provenance
-//   flixw.cov.N.rel           "Name=count,..." tuples per relation in the model
+//   flixw.cov.N.rel           "Name=count,..." tuples per relation in the model (from the provenance model, or the plain model with -Dflixw.covcfg.noprov=1)
 mod FlixwCovHook {
     import java.lang.System
 
@@ -78,6 +78,22 @@ mod FlixwCovHook {
                     }
                 };
                 let _ = System.setProperty("flixw.cov.${n}.derived", Array.toList(counts) |> List.join(","));
+                let _ = System.setProperty("flixw.cov.${n}.rel", StringBuilder.toString(sb));
+                0
+            }
+        }
+        case Fixpoint3.Ast.Datalog.Datalog.Model(db) => unsafe IO {
+            // No provenance (the plain model): the sizes of the relations only.
+            region rc {
+                let sb = StringBuilder.empty(rc);
+                foreach ((relSym, tree) <- db) {
+                    let size = Ref.fresh(rc, 0);
+                    foreach ((_, _) <- tree) Ref.put(Ref.get(size) + 1, size);
+                    match relSym {
+                        case Fixpoint3.Ast.Ram.RelSym.Symbol(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _) =>
+                            StringBuilder.append("${name}=${Ref.get(size)},", sb)
+                    }
+                };
                 let _ = System.setProperty("flixw.cov.${n}.rel", StringBuilder.toString(sb));
                 0
             }

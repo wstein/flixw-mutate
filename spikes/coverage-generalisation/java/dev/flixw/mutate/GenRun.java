@@ -333,6 +333,29 @@ public final class GenRun {
             if (g == null || g != c[4].equals("1")) { bb++; p("DEVIATION branch " + c[0] + ":" + c[1] + " " + c[2] + " " + c[3] + " expected " + c[4] + " got " + g); }
         }
         p("branches compared: " + bt + ", deviating: " + bb);
+        // the written LCOV and Cobertura carry the annotated truth: H and P are hit lines, M is not
+        int fb = 0, ft = 0;
+        String lcov = CovFormats.lcov(m, all, "", rel);
+        String cob = CovFormats.cobertura(m, all, rel, "");
+        for (String f : m.files()) {
+            if (rel.get(f).endsWith("/Limits.flix")) continue;
+            String[] ls = texts.get(f).split("\n", -1);
+            String rec = lcov.substring(lcov.indexOf("SF:" + rel.get(f) + "\n"));
+            rec = rec.substring(0, rec.indexOf("end_of_record"));
+            String cl = cob.substring(cob.indexOf("filename=\"" + rel.get(f) + "\""));
+            cl = cl.substring(0, cl.indexOf("</class>"));
+            for (int i = 0; i < ls.length; i++) {
+                String t = ls[i].stripTrailing();
+                int k = t.lastIndexOf("// ");
+                if (k < 0 || t.length() != k + 4 || "HMP".indexOf(t.charAt(k + 3)) < 0) continue;
+                int hit = t.charAt(k + 3) == 'M' ? 0 : 1;
+                ft++;
+                boolean okL = rec.contains("\nDA:" + (i + 1) + "," + hit + "\n");
+                boolean okC = cl.contains("<line number=\"" + (i + 1) + "\" hits=\"" + hit + "\"");
+                if (!okL || !okC) { fb++; p("DEVIATION format " + rel.get(f) + ":" + (i + 1) + " truth " + t.charAt(k + 3) + " lcov " + okL + " cobertura " + okC); }
+            }
+        }
+        p("format lines compared: " + ft + ", deviating: " + fb);
         // known limits: lines where the tool is expected to differ from the truth, as listed
         int lt = 0, lb = 0;
         java.nio.file.Path limits = project.resolve("expected-limits.tsv");
@@ -349,6 +372,6 @@ public final class GenRun {
             }
             p("known limits listed: " + lt + ", tool result differs from the listing: " + lb);
         }
-        return bad + nb + bb + lb;
+        return bad + nb + bb + lb + fb;
     }
 }
