@@ -18,7 +18,7 @@ build_and_run() {
   mkdir -p "$work/$1"
   repo=$work/$1/$2
   mkdir -p "$repo"
-  cp -R "$root/scripts" "$root/src" "$root/sdk-source.properties" "$repo/"
+  cp -R "$root/scripts" "$root/src" "$root/spikes" "$root/sdk-source.properties" "$repo/"
   git clone -q --no-checkout "$sdk" "$work/$1/$3"
   git -C "$work/$1/$3" checkout -q --detach "$revision"
   if [ "${5:-}" = relative ]; then
@@ -33,6 +33,8 @@ build_and_run() {
   [ ! -e "$work/$1/$4/work" ] || { echo "test-paths: $1: work directory left behind" >&2; exit 1; }
   sh "$repo/scripts/check-sdk-package.sh" "$jar" > /dev/null
   sh "$repo/scripts/test-plugin.sh" "$jar" 0.0.0-test > /dev/null
+  # The engine tests compile every source of the checkout: its path may hold blanks and quotes (plain variant only).
+  if [ "$1" = space ]; then FLIXW_TEST_JARS="${FLIXW_TEST_JARS:-$work/jars}" sh "$repo/scripts/test-engine.sh" > /dev/null; fi
   checks=$((checks + 1))
 }
 build_and_run space 'my repo' 'sdk dir' 'out dir'
