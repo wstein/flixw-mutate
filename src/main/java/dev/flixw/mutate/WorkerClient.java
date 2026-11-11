@@ -70,12 +70,14 @@ final class WorkerClient implements AutoCloseable {
         } catch (IOException e) {
             throw new Died("worker is not running: " + e.getMessage());
         }
-        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
+        // toNanos saturates; the time left is computed by difference, which nanoTime allows.
+        long start = System.nanoTime();
+        long budget = TimeUnit.MILLISECONDS.toNanos(timeoutMs);
         List<Protocol.Message> out = new ArrayList<>();
         while (true) {
             String next;
             try {
-                next = lines.poll(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+                next = lines.poll(Math.max(0, budget - (System.nanoTime() - start)), TimeUnit.NANOSECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 kill();
