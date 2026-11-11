@@ -28,6 +28,12 @@ public final class EngineTest {
         return r.outcome().name().toLowerCase() + " " + r.file() + ":" + r.position() + " " + r.mutant().from() + " -> " + r.mutant().to();
     }
 
+    static boolean hasWorkDir(Path tmp) throws Exception {
+        try (java.util.stream.Stream<Path> s = Files.list(tmp)) {
+            return s.anyMatch(p -> p.getFileName().toString().startsWith("flixw-mutate"));
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Check c = new Check("EngineTest");
         Path calc = SiteFinderTest.FIXTURE;
@@ -84,6 +90,30 @@ public final class EngineTest {
             eq(2, r.results().size());
             eq(List.of(1, 2), r.results().stream().map(x -> x.mutant().id()).toList());
             eq(List.of("killed src/A.flix:1:38 + -> -", "killed src/B.flix:1:38 * -> /"), r.results().stream().map(EngineTest::line).toList());
+        });
+
+        c.test("a schemata program that does not compile stops the run (a user module named FlixwMutant)", () -> {
+            Path root = project("mod FlixwMutant { pub def on(n: Int32): Bool = n == 0 }\nmod A { pub def f(x: Int32): Int32 = x + 1 }\n",
+                "mod TestA { @Test def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.f(1)) }\n");
+            Engine.Failure f = null;
+            try {
+                Engine.run(config(root, null));
+            } catch (Engine.Failure e) {
+                f = e;
+            }
+            yes(f != null && f.getMessage().contains("schemata program does not compile"), String.valueOf(f));
+        });
+
+        c.test("SIGTERM removes the work directory", () -> {
+            Path tmp = Files.createTempDirectory("engine-sigterm");
+            Process p = new ProcessBuilder(JAVA.toString(), "-Djava.io.tmpdir=" + tmp, "-cp", CP, "dev.flixw.mutate.EngineRunner",
+                calc.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            long end = System.nanoTime() + 60_000_000_000L;
+            while (!hasWorkDir(tmp) && System.nanoTime() < end) Thread.sleep(50);
+            yes(hasWorkDir(tmp), "no work directory appeared");
+            p.destroy();
+            yes(p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS), "engine did not end");
+            eq(false, hasWorkDir(tmp));
         });
 
         c.test("default timeout: at least 2000 ms, else ten times the baseline", () -> {
