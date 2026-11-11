@@ -25,6 +25,10 @@ public final class DatalogGen {
 
     record Solve(List<Rule> rules, List<String> facts, long edb, String rel) {}
 
+    /** Source file of a rule signature, and the lines of the facts per head predicate (typed AST), for the LCOV output. */
+    static final TreeMap<String, String> SIG_FILE = new TreeMap<>();
+    static final TreeMap<String, List<String>> FACT_LINES = new TreeMap<>();
+
     static final Pattern PRED = Pattern.compile("(?<![A-Za-z0-9_$])([A-Z][A-Za-z0-9_]*)\\(");
 
     public static void main(String[] a) throws Exception {
@@ -155,6 +159,12 @@ public final class DatalogGen {
             + " facts; " + sigs.size() + " distinct rule signatures, fired in some test " + fired.size() + ", never fired " + (known.size() - fired.size()) + ", no provenance " + (sigs.size() - known.size()) + "; "
             + "source line of a rule instance, by signature alone: unique " + uniqueAll + "; narrowed to the test's def: unique " + unique + ", ambiguous " + ambiguous + ", none " + unknown
             + "; suite " + (hooked ? "with the hook" : "stock library") + " median of " + reps + ": " + suite.get(suite.size() / 2) + " ms (min " + suite.get(0) + ")");
+        String lcovPath = System.getProperty("dl.lcov");
+        if (lcovPath != null) {
+            Files.createDirectories(Path.of(lcovPath).getParent());
+            Files.writeString(Path.of(lcovPath), lcov(project, perTest, sourceRules, defLines));
+            out.println("wrote " + lcovPath);
+        }
         if (expect) {
             int bad = 0, total = 0;
             for (String l : Files.readAllLines(project.resolve("expected-rules.tsv")).stream().skip(1).toList()) {
@@ -180,6 +190,63 @@ public final class DatalogGen {
             out.println(bad == 0 ? "RESULT: OK" : "RESULT: FAIL " + bad + " deviations");
             System.exit(bad == 0 ? 0 : 1);
         }
+    }
+
+    /**
+     * LCOV for the Datalog part: a function per rule (FN: line and signature; FNDA: tuples derived first, summed over the tests,
+     * 1 if the run had no provenance), a line per rule (hit if it fired) and per fact (hit if a solve of some test had a fact of
+     * that predicate: presence, not use).
+     */
+    static String lcov(Path project, TreeMap<String, List<Solve>> perTest, TreeMap<String, List<Integer>> sourceRules, TreeMap<String, int[]> defLines) {
+        TreeMap<String, TreeMap<Integer, long[]>> fn = new TreeMap<>(); // file to line to {derived, present}
+        TreeMap<String, TreeMap<Integer, String>> names = new TreeMap<>();
+        TreeMap<String, TreeMap<Integer, Boolean>> da = new TreeMap<>();
+        java.util.TreeSet<String> factPreds = new java.util.TreeSet<>();
+        for (var sig : sourceRules.entrySet()) {
+            if (sig.getKey().startsWith("$Result")) continue; // a query, not a rule of the program
+            String file = SIG_FILE.get(sig.getKey());
+            for (int line : sig.getValue()) {
+                fn.computeIfAbsent(file, k -> new TreeMap<>()).put(line, new long[] {0, 0});
+                names.computeIfAbsent(file, k -> new TreeMap<>()).put(line, sig.getKey());
+                da.computeIfAbsent(file, k -> new TreeMap<>()).put(line, false);
+            }
+        }
+        for (var e : perTest.entrySet()) for (Solve sv : e.getValue()) {
+            for (String f : sv.facts()) factPreds.add(f.substring(0, f.indexOf('(')));
+            for (Rule ru : sv.rules()) {
+                List<Integer> lines = lines(sourceRules, defLines, e.getKey(), ru.sig());
+                if (lines == null || lines.size() != 1 || ru.sig().startsWith("$Result")) continue;
+                String file = SIG_FILE.get(ru.sig());
+                long[] c = fn.get(file).get(lines.get(0));
+                c[0] += Math.max(ru.derived(), 0);
+                if (ru.derived() < 0) c[1] = 2;
+                if (ru.derived() != 0) da.get(file).put(lines.get(0), true);
+            }
+        }
+        for (var fp : FACT_LINES.entrySet()) for (String fl : fp.getValue()) {
+            String[] c = fl.split("\t");
+            da.computeIfAbsent(c[0], k -> new TreeMap<>()).merge(Integer.parseInt(c[1]), factPreds.contains(fp.getKey()), (x, y) -> x || y);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String file : da.keySet()) {
+            sb.append("TN:\nSF:").append(project.relativize(Path.of(file))).append("\n");
+            int fnh = 0;
+            TreeMap<Integer, long[]> fns = fn.getOrDefault(file, new TreeMap<>());
+            for (var e : fns.entrySet()) sb.append("FN:").append(e.getKey()).append(",").append(names.get(file).get(e.getKey())).append("\n");
+            for (var e : fns.entrySet()) {
+                long count = e.getValue()[0] > 0 ? e.getValue()[0] : e.getValue()[1] == 2 ? 1 : 0; // 2: a run without provenance, presence only
+                sb.append("FNDA:").append(count).append(",").append(names.get(file).get(e.getKey())).append("\n");
+                if (count > 0) fnh++;
+            }
+            sb.append("FNF:").append(fns.size()).append("\nFNH:").append(fnh).append("\nBRF:0\nBRH:0\n");
+            int lh = 0;
+            for (var e : da.get(file).entrySet()) {
+                sb.append("DA:").append(e.getKey()).append(",").append(e.getValue() ? 1 : 0).append("\n");
+                if (e.getValue()) lh++;
+            }
+            sb.append("LF:").append(da.get(file).size()).append("\nLH:").append(lh).append("\nend_of_record\n");
+        }
+        return sb.toString();
     }
 
     /** The source lines of a rule signature; inside the def of the test, if it has constraint sets itself. */
@@ -239,9 +306,13 @@ public final class DatalogGen {
                 List<Object> body = api.children(FlixApi.call(node, "body"));
                 List<String> names = new ArrayList<>();
                 for (Object b : body) if (FlixApi.nodeName(b).equals("TypedAst$Predicate$Body$Atom")) names.add(String.valueOf(FlixApi.call(FlixApi.call(b, "pred"), "name")));
+                String head = String.valueOf(FlixApi.call(FlixApi.call(FlixApi.call(node, "head"), "pred"), "name"));
                 if (!body.isEmpty()) {
-                    String head = String.valueOf(FlixApi.call(FlixApi.call(FlixApi.call(node, "head"), "pred"), "name"));
-                    out.computeIfAbsent(head + "<-" + String.join(",", names), k -> new ArrayList<>()).add((Integer) FlixApi.call(loc, "startLine"));
+                    String sig = head + "<-" + String.join(",", names);
+                    out.computeIfAbsent(sig, k -> new ArrayList<>()).add((Integer) FlixApi.call(loc, "startLine"));
+                    SIG_FILE.put(sig, file);
+                } else {
+                    FACT_LINES.computeIfAbsent(head, k -> new ArrayList<>()).add(file + "\t" + FlixApi.call(loc, "startLine"));
                 }
             }
         }

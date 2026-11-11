@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Checks the prototype outputs: lcov.info (record invariants) and cobertura.xml (against coverage-04.dtd:
 elements, children, required attributes; no DTD validator is installed, so the DTD text itself is parsed).
-Usage: python3 -I check-formats.py <run dir> <coverage-04.dtd>   (exit 1 on a violation)"""
+Usage: python3 -I check-formats.py <run dir> <coverage-04.dtd>   (exit 1 on a violation)
+       python3 -I check-formats.py --lcov <file.info>             (LCOV record invariants only)"""
 import re
 import sys
 import xml.etree.ElementTree as ET
 
-run, dtd = sys.argv[1], sys.argv[2]
 bad = []
+if sys.argv[1] == "--lcov":
+    only = sys.argv[2]
+else:
+    only = None
+    run, dtd = sys.argv[1], sys.argv[2]
 
 # --- LCOV: per record LF/LH/FNF/FNH/BRF/BRH equal the counted lines
 def lcov(path):
@@ -45,6 +50,13 @@ def lcov(path):
     if rec is not None:
         bad.append(f"{path}: record without end_of_record")
     return n
+
+if only:
+    n = lcov(only)
+    print(f"{only}: {n} records; violations: {len(bad)}")
+    for b in bad:
+        print("VIOLATION", b)
+    sys.exit(1 if bad else 0)
 
 # --- DTD
 text = open(dtd).read()
