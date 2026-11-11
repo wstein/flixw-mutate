@@ -34,15 +34,18 @@ public final class PluginMain {
                 return ExitCodes.SUCCESS;
             }
             Long timeoutMs = null;
+            boolean timeoutGiven = false;
             boolean failOnSurvived = false;
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--timeout-ms" -> {
                         if (i + 1 == args.length) throw new Usage("--timeout-ms needs a value\n" + USAGE);
+                        if (timeoutGiven) throw new Usage("--timeout-ms given twice");
+                        timeoutGiven = true;
                         timeoutMs = positive(args[++i]);
                     }
                     case "--fail-on-survived" -> {
-                        if (failOnSurvived) throw new Usage("unknown argument: " + args[i]);
+                        if (failOnSurvived) throw new Usage("--fail-on-survived given twice");
                         failOnSurvived = true;
                     }
                     default -> throw new Usage("unknown argument: " + args[i]);
