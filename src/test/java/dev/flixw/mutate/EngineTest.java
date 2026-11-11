@@ -62,16 +62,19 @@ public final class EngineTest {
                 "killed " + f + "25:58 / -> *",
                 "killed " + f + "36:61 or -> and",
                 "survived " + f + "36:61 < -> <=", "killed " + f + "36:61 < -> >=",
-                "survived " + f + "36:71 > -> >=", "killed " + f + "36:71 > -> <="),
+                "survived " + f + "36:71 > -> >=", "killed " + f + "36:71 > -> <=",
+                "killed " + f + "45:9 and -> or",
+                "killed " + f + "45:20 == -> !=",
+                "survived " + f + "45:28 == -> !="),
                 r.results().stream().map(EngineTest::line).toList());
-            eq(21, r.count(Outcome.KILLED));
-            eq(9, r.count(Outcome.SURVIVED));
+            eq(23, r.count(Outcome.KILLED));
+            eq(10, r.count(Outcome.SURVIVED));
             eq(1, r.count(Outcome.TIMEOUT));
-            eq(10, r.tests());
+            eq(11, r.tests());
             eq(0, r.skippedSites());
         });
 
-        c.test("the skipped test of the fixture is not counted or run", () -> eq(10, Engine.run(config(calc, null)).tests()));
+        c.test("the skipped test of the fixture is not counted or run", () -> eq(11, Engine.run(config(calc, null)).tests()));
 
         c.test("a candidate whose text has a comment in the operator gap is left out and counted", () -> {
             Path root = project("mod A {\n    pub def f(x: Int32): Int32 = x /* c */ + 1\n    pub def g(x: Int32): Int32 = x * 2\n}\n",

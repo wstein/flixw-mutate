@@ -86,10 +86,10 @@ flix_jar=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars
 # The project is copied: the engine refuses a tab or line break in a project path, the repository path may have one.
 cp -R "$root/src/test/fixtures/calc" "$work/calc"
 full 0 '' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
-contains out 'mutants: 31 (killed 21, survived 9, timeout 1); sites left out: 0'
+contains out 'mutants: 34 (killed 23, survived 10, timeout 1); sites left out: 0'
 contains out 'survived  src/Calc.flix:4:13  < -> <='
 contains out 'timeout   src/Calc.flix:11:39  - -> +'
 full 1 '--fail-on-survived' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
-contains out 'mutation score: 71.0%'
+contains out 'mutation score: 70.6%'
 fi
 printf 'test-plugin: %s passed, 0 failed\n' "$checks"
