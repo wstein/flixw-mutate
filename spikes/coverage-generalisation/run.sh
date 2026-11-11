@@ -14,7 +14,7 @@ jar=$(sh "$here/../common/fetch-flix.sh" "$work/jars")
 classes=$work/classes-gen
 rm -rf "$classes"; mkdir -p "$classes" "$work/support"
 # shellcheck disable=SC2046
-javac -cp "$jar" -d "$classes" $(find "$repo/src/main/java/dev/flixw/mutate" "$repo/spikes/common/java" "$here/java" -name '*.java' ! -name CovNop.java ! -name CovMark.java)
+javac -cp "$jar" -d "$classes" $(find "$repo/src/main/java/dev/flixw/mutate" "$repo/spikes/common/java" "$repo/spikes/solver-hook/java/dev/flixw/spike/PatchSolver.java" "$here/java" -name '*.java' ! -name CovNop.java ! -name CovMark.java)
 rm -rf "$work/covcls"; mkdir -p "$work/covcls"
 javac -d "$work/covcls" "$here/java/dev/flixw/spike/CovMark.java" "$here/java/dev/flixw/spike/CovNop.java"
 (cd "$work/covcls" && jar --create --file "$work/support/cov.jar" dev/flixw/spike/CovMark.class && jar --create --file "$work/support/nop.jar" dev/flixw/spike/CovNop.class)
@@ -23,5 +23,5 @@ name=$(basename "$p")
 echo "== $p"
 echo "load average before: $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null || uptime)"
 # shellcheck disable=SC2086
-java -Xmx3g -Xss16m ${JAVA_OPTS:-} -cp "$classes:$jar" dev.flixw.mutate.GenRun "$p" "$work/run-$name" \
+java -Xmx${XMX:-1500m} -Xss16m ${JAVA_OPTS:-} -cp "$classes:$jar" dev.flixw.mutate.GenRun "$p" "$work/run-$name" \
   "$work/support/cov.jar" "${TIMEOUT_MS:-5000}" "${REPS:-3}" "$@" 2> "$work/stderr-$name.log"
