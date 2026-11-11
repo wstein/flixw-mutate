@@ -62,17 +62,21 @@ The kit's cache (`KeyedStore`) is embedded but not used yet.
 ## Mutation run (option 4)
 
 ```sh
-./flixw mutate [--timeout-ms <ms>] [--fail-on-survived]
+./flixw mutate [--timeout-ms <ms>] [--no-selection] [--fail-on-survived]
 ```
 
 The project's `src/**/*.flix` files are mutated, its `test/**/*.flix` files and the `@Test` functions in all
 files are the tests. Sites are picked from the typed AST: comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`),
 numeric `+ - * /`, `and`, `or` and `not`. Each site becomes a call into a generated module `FlixwMutant`
-(a switch read from the JVM property `flixw.mutant` through `unsafe IO`); the operands are not duplicated and
-the right operand of `and`/`or` stays lazy. One worker JVM (the project's Java, with the pinned compiler)
-compiles and loads the rewritten program once; a mutant is a switch number and a rerun of the tests, which
-stops at the first failing test. The report lists every mutant as `killed`, `survived` or `timeout` and the
-score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
+(a switch and coverage marker, the Java class `dev.flixw.mutate.Marker` from a small jar handed to the compiler,
+called through `unsafe IO`); the operands are not duplicated and the right operand of `and`/`or` stays lazy.
+One worker JVM (the project's Java, with the pinned compiler) compiles and loads the rewritten program once.
+A baseline run with every switch off records which test evaluates which site. A mutant is a switch number and a
+rerun of the tests that evaluate its site, which stops at the first failing test; a mutant that no test
+evaluates is `not covered` (survived without a run). `--no-selection` runs every test for every mutant, for
+comparison. The report lists every mutant as `killed`, `survived`, `not covered` or `timeout`, the tests per
+mutant (mean, median, maximum) and the test executions against those of a full run (computed from the position
+of the killing test), and the score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
 baseline run, at least 2000 ms) ends the worker; the next one loads the program again.
 
 Exit codes: 0 report written, 1 survivors with `--fail-on-survived`, 2 the project does not compile, its tests
@@ -85,9 +89,12 @@ Limits of the run:
   named `FlixwMutant`), the run stops with exit 2 and the compiler message.
 - The work directory (`flixw-mutate*` in the temporary directory) is removed on exit and on SIGTERM
   (shutdown hook); after SIGKILL it stays. The worker JVM ends when the engine's stdin pipe closes.
-- `FlixwMutant.on` reads and parses the system property at every evaluation of a site; the number changes
-  between runs in one JVM, so it is not cached.
-- Options given twice (`--timeout-ms`, `--fail-on-survived`) are an error.
+- The selection assumes that a test which does not evaluate a mutant's site behaves as in the baseline: tests
+  with threads or state shared between tests are not covered by the checks, and the optimiser may merge or move
+  calls of the pure-typed switch (the tests compare selected and full runs on two fixtures, no proof). The
+  Datalog route (option 6) has no marker yet.
+- Options given twice (`--timeout-ms`, `--no-selection`, `--fail-on-survived`) are an error; `--fail-on-survived`
+  counts `not covered` mutants as survivors.
 
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog (option 6), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
