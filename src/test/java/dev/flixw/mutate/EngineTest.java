@@ -94,6 +94,22 @@ public final class EngineTest {
                 .filter(x -> x.file().equals("src/Calc.flix") && x.position().equals("7:28")).findFirst().orElseThrow().mutant().id()));
         });
 
+        c.test("instances fixture: mutants in instance methods, trait defaults and a handler are rendered, compiled and run", () -> {
+            Report r = Engine.run(config(SiteFinderTest.INSTANCES, null));
+            String f = "src/Shapes.flix:";
+            eq(List.of(
+                "survived " + f + "8:37 > -> >=", "killed " + f + "8:37 > -> <=",
+                "killed " + f + "9:38 + -> -",
+                "survived " + f + "14:36 < -> <=", "killed " + f + "14:36 < -> >=",
+                "killed " + f + "14:50 * -> /",
+                "killed " + f + "21:29 - -> +",
+                "killed " + f + "30:15 + -> -",
+                "killed " + f + "31:29 + -> -"),
+                r.results().stream().map(EngineTest::line).toList());
+            eq(5, r.tests());
+            eq(0, r.skippedSites());
+        });
+
         c.test("the skipped test of the fixture is not counted or run", () -> eq(11, Engine.run(config(calc, null)).tests()));
 
         c.test("a candidate whose text has a comment in the operator gap is left out and counted", () -> {
