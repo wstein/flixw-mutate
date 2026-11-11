@@ -78,6 +78,17 @@ baseline run, at least 2000 ms) ends the worker; the next one loads the program 
 Exit codes: 0 report written, 1 survivors with `--fail-on-survived`, 2 the project does not compile, its tests
 fail without a mutation, it has no tests, or a worker failed.
 
+Limits of the run:
+- A test counts as failed when it throws. `flix test` (0.79.0) also counts a test with output on stderr as failed;
+  the worker does not: a mutant that only makes a test write to stderr survives.
+- There is no `invalid` outcome. If the rewritten program does not compile (for example a project module
+  named `FlixwMutant`), the run stops with exit 2 and the compiler message.
+- The work directory (`flixw-mutate*` in the temporary directory) is removed on exit and on SIGTERM
+  (shutdown hook); after SIGKILL it stays. The worker JVM ends when the engine's stdin pipe closes.
+- `FlixwMutant.on` reads and parses the system property at every evaluation of a site; the number changes
+  between runs in one JVM, so it is not cached.
+- Options given twice (`--timeout-ms`, `--fail-on-survived`) are an error.
+
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog (option 6), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
 `flix.toml` packages. Tested on Flix 0.79.0 only; the compiler is reached by reflection in `FlixApi`.

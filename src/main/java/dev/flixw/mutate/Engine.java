@@ -62,12 +62,20 @@ public final class Engine {
         } catch (IOException e) {
             throw new Failure("cannot create a work directory: " + e);
         }
+        // A SIGTERM skips the finally block; the worker ends by itself when its stdin closes.
+        Thread cleanup = new Thread(() -> delete(work), "flixw-mutate-cleanup");
+        Runtime.getRuntime().addShutdownHook(cleanup);
         try {
             return new Run(config, root, src, tests, work).execute();
         } catch (IOException e) {
             throw new Failure("I/O error: " + e);
         } finally {
             delete(work);
+            try {
+                Runtime.getRuntime().removeShutdownHook(cleanup);
+            } catch (IllegalStateException e) {
+                // already shutting down: the hook does the work
+            }
         }
     }
 
