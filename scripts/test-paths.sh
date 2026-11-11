@@ -32,7 +32,9 @@ build_and_run() {
   fi
   [ ! -e "$work/$1/$4/work" ] || { echo "test-paths: $1: work directory left behind" >&2; exit 1; }
   sh "$repo/scripts/check-sdk-package.sh" "$jar" > /dev/null
-  sh "$repo/scripts/test-plugin.sh" "$jar" 0.0.0-test > /dev/null
+  # The engine run (a worker JVM with the jar on its class path) only for a plain and a tab path.
+  case $1 in space|tab) engine=1 ;; *) engine=0 ;; esac
+  FLIXW_TEST_ENGINE_RUN=$engine sh "$repo/scripts/test-plugin.sh" "$jar" 0.0.0-test > /dev/null
   # The engine tests compile every source of the checkout: its path may hold blanks and quotes (plain variant only).
   if [ "$1" = space ]; then FLIXW_TEST_JARS="${FLIXW_TEST_JARS:-$work/jars}" sh "$repo/scripts/test-engine.sh" > /dev/null; fi
   checks=$((checks + 1))
