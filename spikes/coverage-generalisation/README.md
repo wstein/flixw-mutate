@@ -9,7 +9,7 @@ Can the marker approach of #18 be generalised to test coverage of functional Fli
 ## Result in short
 
 - Functional: regions (function entry, `if` branch, `match` arm, lambda body) from the typed AST, one marker per region in a copy of the source, per-test hit sets from the baseline run. On a fixture with hand-written ground truth: 26 of 26 lines, 10 of 10 functions, 18 of 18 branches agree; three deliberately wrong variants and a changed limits listing each fail at the intended place. On flix-invaders (501 tests, 13.7k lines): all 501 tests pass instrumented as plain, the suite is 12 % slower in two clean rounds (5 % to 12 % by the minima). Known limits: lazy `and`/`or` operands and loop bodies are not regions (lines owned by the enclosing region read as hit).
-- Markers survive the optimiser in the form `if (hit(n)) bug!(..) else { E }` (the result is used). In flix-invaders 1156 of 1256 markers are in the bytecode; 87 of the 100 missing are dead functions or inside one.
+- Markers are kept by the optimiser in the form `if (hit(n)) bug!(..) else { E }` (the result is used), with one gap: in flix-invaders 1156 of 1256 markers are in the bytecode; 87 of the 100 missing are dead functions or inside one, 13 are branches or lambdas missing inside live functions (cause UNKNOWN). A missing marker reads as "not covered", so those 13 can be false "not covered"; resolving them is a precondition of the recommendation.
 - Datalog: rules and facts per test through the solver hook are reachable at three levels: presence (cheap, exact), relation sizes (cheap), and tuples first derived per rule through a second solve with provenance (exact on the fixture, but it does not terminate on cyclic programs: 12 of 23 tests in `Test.Exp.Fixpoint.Solve.Simple` hit the 8 s timeout). The hook has no source positions; the rule is mapped to its source line through the typed AST by predicate names, unique for 419 of 432 rule instances once the search is narrowed to the test's def (in the 10 Flix test files that have a solve of their own).
 - Formats: LCOV and Cobertura XML are generated and checked for record invariants and `coverage-04.dtd`; neither expresses a partly covered line; LCOV carries per-test records (`TN:`), 27.6 MB for 501 tests. The text report follows `Report.format`.
 - Recommendation (section 4): one id space of sites, the existing marker class and `Coverage` table (test to site ids), two site sources and two hit sources behind the same table; keep the coverage compile separate from the mutant compile at first.
@@ -65,7 +65,7 @@ Every real, non-synthetic expression in the def is an expression start (file, of
 
 ### 1.2 Accuracy against ground truth
 
-`fixture/` has 3 source files (`Grade`, `Colors` with an instance, `Limits`) and 11 tests. The expected values of `Grade` and `Colors` were written from the code before the tool existed (commit `fcda057`; at that commit `run.sh` fails: no tool); `Limits` was added with the tool. Recorded run, `sh run.sh`: 32 regions (13 entry, 5 then, 5 else, 8 arm, 1 lambda), 97 expression starts, 11 tests pass instrumented and uninstrumented with equal outcomes.
+`fixture/` has 3 source files (`Grade`, `Colors` with an instance, `Limits`) and 11 tests. The expected values of `Grade` and `Colors` were written from the code before the tool existed (commit `7e95793`; at that commit `run.sh` fails: no tool); `Limits` was added with the tool. Recorded run, `sh run.sh`: 32 regions (13 entry, 5 then, 5 else, 8 arm, 1 lambda), 97 expression starts, 11 tests pass instrumented and uninstrumented with equal outcomes.
 
 | Check | Compared | Deviating |
 | --- | --- | --- |
@@ -81,6 +81,7 @@ Counter-probes (each run must fail at the intended cause; recorded runs):
 | no lambda regions | `-Dcov.lambdas=false` | `Grade.flix:25` expected P, got H (1 deviation): the lambda in `total(Nil)` never runs, its line reads as hit |
 | a line is owned by the outermost region | `-Dcov.sabotage=outer` | 10 deviations: 8 lines (every line inside an unhit branch reads H) and the 2 limit rows; functions and branches unaffected |
 | markers never record | `-Dcov.sabotage=nomarks` | 43 deviations: 20 lines, 9 functions, 12 branches, 2 limit rows |
+| a partly hit line written as `DA:n,0` in LCOV (`-Dcov.sabotage=dap`) | format values are compared with the annotations (26 lines, LCOV `DA` and Cobertura `hits`) | 2 deviations (`Grade.flix:25`, `:35`); `check-formats.py` alone passes this output (0 violations) |
 | a limits row changed (`Limits.flix:6` tool value M) | a copy of `fixture/` with that edit | 1 deviation: the tool still says H |
 | a Cobertura writer without `complexity` on `<method>` | (earlier version) | `check-formats.py`: 10 violations of `coverage-04.dtd`, 0 after the fix |
 
@@ -106,8 +107,8 @@ Marker cost, `bench` (3 tests: a loop of 10,000,000 iterations with 3 regions pe
 
 | Test | Plain | Nop | Recording | Recording minus plain |
 | --- | --- | --- | --- | --- |
-| loop, 30,000,000 marker calls | 5.08 to 5.16 | 5.08 to 5.17 | 6.23 to 6.25 | +1.1 ms (21 %), 0.04 ns per call |
-| loopMatch, 20,000,000 marker calls | 2.93 to 2.98 | 2.92 to 2.98 | 3.21 to 3.23 | +0.3 ms (10 %), 0.014 ns per call |
+| loop, 30,000,000 marker calls | 5.08 to 5.16 | 5.08 to 5.17 | 6.23 to 6.25 | +1.1 ms (21 %), |
+| loopMatch, 20,000,000 marker calls | 2.93 to 2.98 | 2.92 to 2.98 | 3.21 to 3.23 | +0.3 ms (10 %), |
 | sumTo, 1,000,000 lambda calls | 5.54 to 6.25 | 5.43 to 5.62 | 5.30 to 5.63 | not distinguishable |
 
 The medians vary much more than the minima (round 1 loop plain median 8.6 ms, round 3 5.1 ms): the machine was shared. The JIT inlines the static call; the loops run at 0.5 ns per iteration, so this says how a loop of nothing but markers behaves, not a project.
@@ -146,20 +147,23 @@ Findings about the hook input (0.79.0):
 
 ### 2.2 Ground truth
 
-`datalog-fixture/` (`DlNet.flix`, `TestNet.flix`): `reachable()` with 5 facts and 4 rules (one never fires: `Dead(x) :- Reach(x), Edge(x, 99)`), solved then queried; `evens()` with 3 facts, 1 rule with a guard, queried directly; `double()` without Datalog. Expected tuples first derived per rule, fact counts and rule lines are in the TSV files (derived: 1, 2, 0, 1 and 2, 2 for the `$Result` rule; facts 5 and 3). `sh run-datalog.sh`: 9 comparisons, 0 deviating; 2 of 3 tests have a solve; 6 rule signatures, 5 fired in some test, 1 never; rule line unique for 6 of 6. Counter-probes (modified hook through `HOOK=`):
+`datalog-fixture/` (`DlNet.flix`, `TestNet.flix`): `reachable()` with 5 facts and 4 rules (one never fires: `Dead(x) :- Reach(x), Edge(x, 99)`), solved then queried; `evens()` with 3 facts, 1 rule with a guard, queried directly; `double()` without Datalog. Expected tuples first derived per rule, fact counts and rule lines are in the TSV files (derived: 1, 2, 0, 1 and 2, 2 for the `$Result` rule; facts 5 and 3). `sh run-datalog.sh`: 12 comparisons (rules, facts, solves per test with relation sizes and tuples from facts), 0 deviating; 2 of 3 tests have a solve; 6 rule signatures, 5 fired in some test, 1 never; rule line unique for 6 of 6. Counter-probes (modified hook through `HOOK=`):
 
 | Variant | Result |
 | --- | --- |
-| index off by one (`let i = rule`) | 5 deviations (derived counts shift to the wrong rule) |
-| skip every solve with a `$Result` rule | 4 deviations (rules and facts of `evens`, one test without a solve more) |
-| `-Dflixw.covcfg.noprov=1` (no second solve) | 6 deviations: derived is n/a; presence and relation sizes remain |
+| index off by one (`let i = rule`) | 7 deviations (derived counts shift to the wrong rule) |
+| skip every solve with a `$Result` rule | 5 deviations (rules, facts and relations of `evens`, one test without a solve more) |
+| relation sizes + 2 (`HOOK=` copy) | `expected-relations.tsv`: solves per test, relation sizes, tuples from facts (12 comparisons in all) | 2 deviations |
+| fact tuples shifted into the rule counts (edb prefix) | same | 5 deviations at the rule rows; a hook that only blanks `edb` is not caught (n/a is legal without provenance) |
+| `$Result`-only solves recorded as solves of the program | same | 1 deviation (2 solves for `testReachable`) |
+| `-Dflixw.covcfg.noprov=1` (no second solve) | 6 deviations: derived is n/a; solves per test, facts, relation sizes and fact-derived tuples (n/a) are still compared and agree |
 
 ### 2.3 Granularity reachable, stability, effort
 
 | Level | Source | Cost | Exact | Result |
 | --- | --- | --- | --- | --- |
 | rule and fact present in a solve of the test | constraint vectors at the hook | one property write per rule | yes | 10 of the 12 material files (the other two have no solve of their own) |
-| head relation size | model at the hook | one pass over the model | per predicate: rules that share a head predicate (`Reach` has two) are not told apart | works without provenance |
+| head relation size | model at the hook | one pass over the model | per predicate: rules that share a head predicate (`Reach` has two) are not told apart | works without provenance; compared with `expected-relations.tsv` |
 | tuples first derived per rule | second solve with provenance | a second solve | on the fixture yes | cyclic programs do not terminate |
 | fact used (tuple level) | proof trees (`ProvenanceReconstruct.provQuery`) or an own body evaluation | not built | not run | UNKNOWN |
 
@@ -195,7 +199,7 @@ All three are generated from the same model by `CovFormats` (functional part) an
 | Partly hit line | not expressible: `DA` is 1; `BRDA` carries the branches | `condition-coverage="50% (1/2)"` on branch lines | yes (`partly`) |
 | Function | `FN`, `FNDA` | `<method>` with its line | yes (`not covered` lines) |
 | Branch | `BRDA:line,block,branch,taken` | only the condition-coverage string; `<conditions>` is optional and not written | yes |
-| Per test | `TN:<test>` records; per-test file is 27.6 MB for 501 tests (lines only) | not in the format | tests per region histogram, `Coverage` table |
+| Per test | `TN:<test>` records; per-test file is 27.6 MB for 501 tests (`DA`, `FN` and `BRDA` records) | not in the format | tests per region histogram, `Coverage` table |
 | Counts | counts in `DA`/`FNDA`; the marker is a boolean: count is 1 | `hits` | not needed |
 | Datalog rule | `FN:line,signature`, `FNDA:<tuples derived>`, `DA` of the rule line | `<method>` | text: fired / not fired, derived count |
 | Datalog fact | `DA` of the fact line (present in a solve; not "used") | `<line>` | listed per solve |
@@ -225,6 +229,7 @@ Two sources behind that table:
 Decisions for the owner, with a recommendation:
 
 - Coverage compile: separate from the mutant compile at first (one more compile of 2 to 12 s depending on the machine load, no mixed code shapes; marker form and mutation helpers do not interact). A single program with both kinds of site saves that compile, needs the combined renderer and the check that the optimiser keeps both: UNKNOWN.
+- Precondition for the source marker: the 13 markers missing in live flix-invaders functions (1.3) are explained or removed, else "not covered" can be false.
 - Datalog level in the first version: presence plus relation sizes, without the provenance solve (no hang, no second solve); provenance as an option with a documented limit (cyclic programs) or not at all until the own body evaluation is built.
 - Lines: expression-start model as in the spike (needs the typed-AST walk anyway); lambda regions on, loop bodies and lazy operands as listed limits, or regions for `and`/`or`, `foreach` and handler bodies as the next step (not measured).
 - Output: own report and LCOV first (per-test `TN:`), Cobertura after.
@@ -238,6 +243,7 @@ Decisions for the owner, with a recommendation:
 - Tests that start threads, share Java state, or time out: not run here (as in #16). A test that times out in the baseline loses its hit set.
 - The hook is tied to Fixpoint3 internals; the provenance solve does not terminate on some cyclic programs and fails on lattice programs.
 - Rule-to-source mapping uses predicate names; two identical rules in one def stay ambiguous (13 of 432 instances: 11 in `Solve.Simple`, 2 in `PSolve`), and facts on one line cannot be told apart.
+- LCOV `FN` names are rule signatures; two equal signatures in one file would give duplicate names (not checked).
 - Per-test LCOV is large (27.6 MB for 501 tests); a per-test binary form would be smaller.
 - Timings come from a shared, loaded machine and a single Linux aarch64 VM.
 

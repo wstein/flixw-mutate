@@ -183,6 +183,24 @@ public final class DatalogGen {
                 int got = sv.size() > Integer.parseInt(c[1]) ? sv.get(Integer.parseInt(c[1])).facts().size() : -1;
                 if (got != Integer.parseInt(c[2])) { bad++; out.println("DEVIATION facts " + c[0] + " solve " + c[1] + " expected " + c[2] + " got " + got); }
             }
+            // solves per test, relation sizes and tuples from facts per solve
+            Path er = project.resolve("expected-relations.tsv");
+            for (String l : Files.readAllLines(er).stream().skip(1).toList()) {
+                String[] c = l.split("\t");
+                total++;
+                List<Solve> sv = perTest.getOrDefault(c[0], List.of());
+                int want = Integer.parseInt(c[1]);
+                String got = "none";
+                boolean ok = sv.size() == want;
+                if (ok && want > 0) {
+                    Solve s0 = sv.get(0);
+                    java.util.TreeSet<String> rel = new java.util.TreeSet<>(List.of(s0.rel().split(",")));
+                    java.util.TreeSet<String> exp = new java.util.TreeSet<>(List.of(c[2].split(",")));
+                    got = s0.rel() + " edb " + s0.edb();
+                    ok = rel.equals(exp) && (s0.edb() < 0 || s0.edb() == Long.parseLong(c[3]));
+                }
+                if (!ok) { bad++; out.println("DEVIATION relations " + c[0] + " expected solves " + c[1] + " " + c[2] + " edb " + c[3] + ", got " + sv.size() + " " + got); }
+            }
             long noSolve = perTest.values().stream().filter(List::isEmpty).count();
             total++;
             if (noSolve != 1) { bad++; out.println("DEVIATION tests without a solve expected 1 got " + noSolve); }

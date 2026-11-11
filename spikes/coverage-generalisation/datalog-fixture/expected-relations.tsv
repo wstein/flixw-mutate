@@ -1,0 +1,4 @@
+test	solves	relations	edb
+TestNet.testReachable	1	Edge=3,Lone=1,Reach=3,Start=1,Tag=1	5
+TestNet.testEvens	1	$Result=2,Even=2,Num=3	3
+TestNet.testDouble	0	-	-
