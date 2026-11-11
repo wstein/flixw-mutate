@@ -19,9 +19,14 @@ FLIXW_TEST_FLIX_JAR=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:
 export FLIXW_TEST_FIXTURES FLIXW_TEST_FLIX_JAR
 javac -Xlint:all -Werror --release 21 -d "$work/classes" @"$work/sources.txt"
 total=0
+bad=0
 for t in $(cd "$root/src/test/java/dev/flixw/mutate" && ls ./*Test.java | sed 's|^\./||; s|\.java$||'); do
-  java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out" || { cat "$work/out"; echo "test-engine: $t failed" >&2; exit 1; }
+  if java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out"; then
+    total=$((total + $(tail -n 1 "$work/out" | awk '{print $2}')))
+  else
+    bad=$((bad + 1)); echo "test-engine: $t failed" >&2
+  fi
   cat "$work/out"
-  total=$((total + $(tail -n 1 "$work/out" | awk '{print $2}')))
 done
+if [ "$bad" -ne 0 ]; then echo "test-engine: $bad suite(s) failed" >&2; exit 1; fi
 echo "test-engine: $total passed, 0 failed"
