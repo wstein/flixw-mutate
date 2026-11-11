@@ -205,9 +205,75 @@ public final class DatalogGen {
             total++;
             if (noSolve != 1) { bad++; out.println("DEVIATION tests without a solve expected 1 got " + noSolve); }
             out.println("compared: " + total + ", deviating: " + bad);
+            int tableBad = compareTable(project, src, perTest, sourceRules, defLines, out);
+            bad += tableBad;
             out.println(bad == 0 ? "RESULT: OK" : "RESULT: FAIL " + bad + " deviations");
             System.exit(bad == 0 ? 0 : 1);
         }
+    }
+
+    /**
+     * The solves as a site table and hits: one RULE site per source rule line and one FACT site per fact of the
+     * source text, reached by a test if a solve of it had the rule or the fact (derived or not). The views of the
+     * table must give expected-rules.tsv (test, line), the fact counts of expected-facts.tsv and the tests without
+     * a solve. Relation sizes and derived counts are not in the table (level fired is not built).
+     */
+    static int compareTable(Path project, List<Path> src, TreeMap<String, List<Solve>> perTest, TreeMap<String, List<Integer>> sourceRules,
+                            TreeMap<String, int[]> defLines, java.io.PrintStream out) throws java.io.IOException {
+        if (src.size() != 1) { out.println("table: skipped, " + src.size() + " source files"); return 0; }
+        String file = src.get(0).getFileName().toString();
+        String[] text = Files.readString(src.get(0)).split("\n", -1);
+        List<Point> drafts = new ArrayList<>();
+        int offset = 0;
+        for (int i = 0; i < text.length; i++) {
+            if (!text[i].contains(":-")) {
+                java.util.regex.Matcher mt = java.util.regex.Pattern.compile("[A-Z]\\w*\\([^()]*\\)\\.").matcher(text[i]);
+                while (mt.find()) drafts.add(new Point(0, Point.Kind.FACT, file, i + 1, new Span(offset + mt.start(), offset + mt.end())));
+            }
+            offset += text[i].length() + 1;
+        }
+        java.util.TreeSet<Integer> ruleLines = new java.util.TreeSet<>();
+        for (List<Integer> l : sourceRules.values()) ruleLines.addAll(l);
+        int[] starts = new int[text.length + 1];
+        for (int i = 0; i < text.length; i++) starts[i + 1] = starts[i] + text[i].length() + 1;
+        for (int line : ruleLines) drafts.add(new Point(0, Point.Kind.RULE, file, line, new Span(starts[line - 1], starts[line] - 1)));
+        SiteTable t = SiteTable.sorted(drafts);
+        Hits.Builder b = new Hits.Builder(t, perTest.keySet());
+        int unmatched = 0;
+        for (var e : perTest.entrySet())
+            for (Solve sv : e.getValue()) {
+                for (Rule ru : sv.rules()) {
+                    List<Integer> lines = lines(sourceRules, defLines, e.getKey(), ru.sig());
+                    if (lines == null || lines.size() != 1) { unmatched++; continue; }
+                    for (Point pt : t.points()) if (pt.kind() == Point.Kind.RULE && pt.line() == lines.get(0)) b.reach(e.getKey(), pt.id());
+                }
+                for (String f : sv.facts()) {
+                    boolean found = false;
+                    for (Point pt : t.points())
+                        if (pt.kind() == Point.Kind.FACT && text(starts, text, pt).equals(f)) { b.reach(e.getKey(), pt.id()); found = true; }
+                    if (!found) unmatched++;
+                }
+            }
+        Hits h = b.build();
+        int bad = unmatched;
+        if (unmatched > 0) out.println("DEVIATION table: " + unmatched + " rules or facts without a unique site");
+        List<String> wantRules = new ArrayList<>();
+        for (String l : Files.readAllLines(project.resolve("expected-rules.tsv")).stream().skip(1).toList()) { String[] c = l.split("\t"); wantRules.add(c[0] + "\t" + c[3]); }
+        java.util.TreeSet<String> w = new java.util.TreeSet<>(wantRules), g = new java.util.TreeSet<>(Views.reached(t, h, Point.Kind.RULE));
+        if (!w.equals(g)) { bad++; out.println("DEVIATION table rules expected " + w + " got " + g); }
+        java.util.Map<String, Integer> gotFacts = new TreeMap<>(), wantFacts = new TreeMap<>();
+        for (String r : Views.reached(t, h, Point.Kind.FACT)) gotFacts.merge(r.split("\t")[0], 1, Integer::sum);
+        for (String l : Files.readAllLines(project.resolve("expected-facts.tsv")).stream().skip(1).toList()) { String[] c = l.split("\t"); wantFacts.put(c[0], Integer.parseInt(c[2])); }
+        if (!wantFacts.equals(gotFacts)) { bad++; out.println("DEVIATION table facts expected " + wantFacts + " got " + gotFacts); }
+        long noSolve = perTest.keySet().stream().filter(x -> h.idsOf(x).isEmpty()).count();
+        if (noSolve != 1) { bad++; out.println("DEVIATION table tests without a rule or fact expected 1 got " + noSolve); }
+        out.println("table (rules " + w.size() + ", fact counts " + wantFacts.size() + ", tests without a solve 1) compared: " + (w.size() + wantFacts.size() + 1) + ", deviating: " + bad);
+        return bad;
+    }
+
+    private static String text(int[] starts, String[] text, Point pt) {
+        int line = pt.line();
+        return text[line - 1].substring(pt.span().start() - starts[line - 1], pt.span().end() - starts[line - 1]);
     }
 
     /**
