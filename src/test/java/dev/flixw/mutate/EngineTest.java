@@ -25,7 +25,7 @@ public final class EngineTest {
     }
 
     static String line(Result r) {
-        return r.outcome().name().toLowerCase() + " " + r.file() + ":" + r.position() + " " + r.mutant().from() + " -> " + r.mutant().to();
+        return r.outcome().label() + " " + r.file() + ":" + r.position() + " " + r.mutant().from() + " -> " + r.mutant().to();
     }
 
     static boolean hasWorkDir(Path tmp) throws Exception {
@@ -65,10 +65,11 @@ public final class EngineTest {
                 "survived " + f + "36:71 > -> >=", "killed " + f + "36:71 > -> <=",
                 "killed " + f + "45:9 and -> or",
                 "killed " + f + "45:20 == -> !=",
-                "survived " + f + "45:28 == -> !="),
+                "not covered " + f + "45:28 == -> !="),
                 r.results().stream().map(EngineTest::line).toList());
             eq(23, r.count(Outcome.KILLED));
-            eq(10, r.count(Outcome.SURVIVED));
+            eq(9, r.count(Outcome.SURVIVED));
+            eq(1, r.count(Outcome.NOT_COVERED));
             eq(1, r.count(Outcome.TIMEOUT));
             eq(11, r.tests());
             eq(0, r.skippedSites());

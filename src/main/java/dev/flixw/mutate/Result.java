@@ -3,6 +3,14 @@ package dev.flixw.mutate;
 /**
  * The outcome of one mutant. {@code file} is relative to the project root, {@code position} is
  * {@code line:col} of the site in the original file, {@code detail} names the failing test for a killed
- * mutant and is empty otherwise.
+ * mutant and is empty otherwise. {@code selected} is the number of tests the mutant was run with,
+ * {@code executed} the number of tests that ran (a run stops at the first failure), {@code fullExecuted} the
+ * number a run of all tests would execute: measured without selection, with selection computed as the
+ * position of the killing test, or all tests for a mutant that survives (for a timeout, all tests).
  */
-public record Result(Mutant mutant, String file, String position, Outcome outcome, String detail) {}
+public record Result(Mutant mutant, String file, String position, Outcome outcome, String detail,
+                     int selected, int executed, int fullExecuted) {
+    public Result(Mutant mutant, String file, String position, Outcome outcome, String detail) {
+        this(mutant, file, position, outcome, detail, 0, 0, 0);
+    }
+}

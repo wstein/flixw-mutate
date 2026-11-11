@@ -13,7 +13,7 @@ import java.util.Map;
 /** flixw plugin entry point; the shell (context, exit codes) comes from the SDK kit. */
 public final class PluginMain {
     private static final String USAGE =
-        "usage: ./flixw mutate [--timeout-ms <ms>] [--fail-on-survived] | --help | --version";
+        "usage: ./flixw mutate [--timeout-ms <ms>] [--no-selection] [--fail-on-survived] | --help | --version";
 
     private PluginMain() { }
 
@@ -36,6 +36,7 @@ public final class PluginMain {
             Long timeoutMs = null;
             boolean timeoutGiven = false;
             boolean failOnSurvived = false;
+            boolean noSelection = false;
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--timeout-ms" -> {
@@ -43,6 +44,10 @@ public final class PluginMain {
                         if (timeoutGiven) throw new Usage("--timeout-ms given twice");
                         timeoutGiven = true;
                         timeoutMs = positive(args[++i]);
+                    }
+                    case "--no-selection" -> {
+                        if (noSelection) throw new Usage("--no-selection given twice");
+                        noSelection = true;
                     }
                     case "--fail-on-survived" -> {
                         if (failOnSurvived) throw new Usage("--fail-on-survived given twice");
@@ -64,10 +69,11 @@ public final class PluginMain {
             System.out.println("project root: " + context.projectRoot());
             String classpath = pluginLocation() + File.pathSeparator + context.compilerJar();
             Engine.Config config = new Engine.Config(context.projectRoot(), context.java(), classpath, timeoutMs,
-                line -> System.err.println(line));
+                line -> System.err.println(line), !noSelection);
             Report report = Engine.run(config);
             System.out.print(report.format());
-            return failOnSurvived && report.count(Outcome.SURVIVED) > 0 ? ExitCodes.POLICY_FINDING : ExitCodes.SUCCESS;
+            int survivors = report.count(Outcome.SURVIVED) + report.count(Outcome.NOT_COVERED);
+            return failOnSurvived && survivors > 0 ? ExitCodes.POLICY_FINDING : ExitCodes.SUCCESS;
         } catch (Usage failure) {
             System.err.println("flixw-mutate: " + failure.getMessage());
             return ExitCodes.ERROR;
