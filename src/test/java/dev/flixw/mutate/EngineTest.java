@@ -38,10 +38,10 @@ public final class EngineTest {
             eq(List.of(
                 "survived " + f + "4:13 < -> <=", "killed " + f + "4:13 < -> >=",
                 "survived " + f + "4:33 > -> >=", "killed " + f + "4:33 > -> <=",
-                "killed " + f + "7:13 <= -> <", "killed " + f + "7:13 <= -> >",
+                "survived " + f + "7:13 <= -> <", "killed " + f + "7:13 <= -> >",
                 "killed " + f + "7:28 + -> -",
                 "killed " + f + "7:38 - -> +",
-                "timeout " + f + "11:13 <= -> <", "killed " + f + "11:13 <= -> >",
+                "killed " + f + "11:13 <= -> <", "killed " + f + "11:13 <= -> >",
                 "timeout " + f + "11:39 - -> +",
                 "killed " + f + "11:49 + -> -",
                 "killed " + f + "13:38 == -> !=",
@@ -59,8 +59,8 @@ public final class EngineTest {
                 "survived " + f + "36:71 > -> >=", "killed " + f + "36:71 > -> <="),
                 r.results().stream().map(EngineTest::line).toList());
             eq(21, r.count(Outcome.KILLED));
-            eq(8, r.count(Outcome.SURVIVED));
-            eq(2, r.count(Outcome.TIMEOUT));
+            eq(9, r.count(Outcome.SURVIVED));
+            eq(1, r.count(Outcome.TIMEOUT));
             eq(10, r.tests());
             eq(0, r.skippedSites());
         });
