@@ -20,6 +20,6 @@ total=0
 for t in $(cd "$root/src/test/java/dev/flixw/mutate" && ls ./*Test.java | sed 's|^\./||; s|\.java$||'); do
   java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out" || { cat "$work/out"; echo "test-engine: $t failed" >&2; exit 1; }
   cat "$work/out"
-  total=$((total + $(awk '{print $2}' "$work/out")))
+  total=$((total + $(tail -n 1 "$work/out" | awk '{print $2}')))
 done
 echo "test-engine: $total passed, 0 failed"
