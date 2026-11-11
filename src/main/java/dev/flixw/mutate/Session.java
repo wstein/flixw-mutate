@@ -7,10 +7,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
-import java.util.SortedSet;
+
 import java.util.TreeMap;
-import java.util.TreeSet;
+
 import java.util.stream.Stream;
 
 /**
@@ -45,6 +44,7 @@ final class Session implements AutoCloseable {
     private long baselineMs;
     private long timeout;
     private Coverage coverage;
+    private SiteTable siteTable;
     private List<String> testNames = List.of();
     private boolean empty;
 
@@ -165,6 +165,7 @@ final class Session implements AutoCloseable {
             }
             loadLines.add("F\t" + target);
         }
+        siteTable = mutantTable();
         Path module = work.resolve("FlixwMutant.flix");
         workDir.run(() -> Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8));
         loadLines.add("F\t" + module);
@@ -186,6 +187,15 @@ final class Session implements AutoCloseable {
 
     // --- runs ------------------------------------------------------------------------------------------------
 
+    /** The mutants as rows of the site table: the switch number is the id (file, then offset order of the render). */
+    private SiteTable mutantTable() {
+        List<Point> points = new ArrayList<>();
+        for (Mutant m : mutants)
+            points.add(new Point(m.id(), Point.Kind.MUTANT, file(m), Integer.parseInt(position(m).substring(0, position(m).indexOf(':'))),
+                m.site().whole()));
+        return SiteTable.of(points);
+    }
+
     /**
      * Runs the baseline in the order given (name order for an empty list) on the loaded program and returns
      * which switches each test evaluated.
@@ -197,13 +207,11 @@ final class Session implements AutoCloseable {
         if (!base.verb().equals("result")) throw failed("the baseline run failed", base);
         if (base.field(0).equals("killed"))
             throw new Engine.Failure("tests fail without a mutation: " + base.field(1) + ": " + base.field(2));
-        SortedMap<String, SortedSet<Integer>> hits = new TreeMap<>();
-        for (Protocol.Message m : reply.subList(0, reply.size() - 1)) {
-            SortedSet<Integer> ids = new TreeSet<>();
-            for (String id : m.fields().subList(1, m.fields().size())) ids.add(Integer.valueOf(id));
-            hits.put(m.field(0), ids);
-        }
-        return new Coverage(hits);
+        List<Protocol.Message> perTest = reply.subList(0, reply.size() - 1);
+        Hits.Builder hits = new Hits.Builder(siteTable, perTest.stream().map(m -> m.field(0)).toList());
+        for (Protocol.Message m : perTest)
+            for (String id : m.fields().subList(1, m.fields().size())) hits.reach(m.field(0), Integer.parseInt(id));
+        return new Coverage(siteTable, hits.build());
     }
 
     /**
