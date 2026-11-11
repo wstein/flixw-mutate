@@ -130,7 +130,17 @@ public final class GenRun {
         var loaded = FlixHost.load(cr);
         long tLoad = ms(t0);
         p("render " + tRender + " ms; instrumented compile " + tCompile + " ms, load " + tLoad + " ms");
-        if (!nop && sabotage.isEmpty()) audit(cr, sites);
+        if (!nop && sabotage.isEmpty()) {
+            MarkerAudit audit = MarkerAudit.scan(cr, sites);
+            p(audit.summary());
+            Files.writeString(work.resolve("marker-audit.tsv"), audit.tsv(rel));
+            if (!audit.unexplained().isEmpty()) {
+                for (MarkerAudit.Row m : audit.unexplained()) p("MISSING MARKER in a live function: " + m.region().kind() + " " + rel.get(m.region().file()) + ":" + m.region().line() + " in " + m.function());
+                p("RESULT: FAIL " + audit.unexplained().size() + " missing markers in live functions");
+                System.exit(1);
+            }
+            if (Boolean.getBoolean("cov.auditOnly")) return;
+        }
 
         // 4. tests one by one
         TreeMap<String, Runnable> fns = FlixHost.tests(loaded);
@@ -239,50 +249,6 @@ public final class GenRun {
         try (Stream<Path> s = Files.walk(dir)) {
             return s.filter(f -> f.toString().endsWith(".flix")).sorted().toList();
         }
-    }
-
-    /** Markers in the compiled bytecode: distinct ids and call sites of CovMark.hit, against the inserted regions. */
-    static void audit(CompilationResult cr, CovSites sites) {
-        TreeMap<Integer, Integer> found = new TreeMap<>();
-        scala.collection.immutable.Map<java.lang.constant.ClassDesc, ca.uwaterloo.flix.language.phase.jvm.JvmClass> classes = cr.root().classes();
-        scala.jdk.javaapi.CollectionConverters.asJava(classes).forEach((cd, jc) -> new ClassReader(jc.bytecode()).accept(new ClassVisitor(Opcodes.ASM9) {
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
-                return new MethodVisitor(Opcodes.ASM9) {
-                    int last = -1;
-
-                    @Override public void visitInsn(int op) { last = op >= Opcodes.ICONST_M1 && op <= Opcodes.ICONST_5 ? op - Opcodes.ICONST_0 : -1; }
-
-                    @Override public void visitIntInsn(int op, int v) { last = op == Opcodes.BIPUSH || op == Opcodes.SIPUSH ? v : -1; }
-
-                    @Override public void visitLdcInsn(Object v) { last = v instanceof Integer i ? i : -1; }
-
-                    @Override
-                    public void visitMethodInsn(int op, String owner, String n, String d, boolean itf) {
-                        if (owner.equals("dev/flixw/spike/CovMark") && n.equals("hit")) found.merge(last, 1, Integer::sum);
-                        last = -1;
-                    }
-                };
-            }
-        }, 0));
-        int dup = 0, sitesTotal = 0, missing = 0, unknown = 0;
-        for (var e : found.entrySet()) { sitesTotal += e.getValue(); if (e.getValue() > 1) dup++; }
-        List<Integer> miss = new ArrayList<>();
-        TreeMap<String, Integer> missByKind = new TreeMap<>();
-        for (CovSites.Region r : sites.regions) if (!found.containsKey(r.id())) { missing++; miss.add(r.id()); missByKind.merge(r.kind().name(), 1, Integer::sum); }
-        // A missing region inside a missing function entry is explained by a dropped function; the others by the optimiser's removal of a branch or lambda.
-        int explained = 0;
-        for (CovSites.Region r : sites.regions) {
-            if (found.containsKey(r.id())) continue;
-            if (r.kind() == CovSites.Kind.ENTRY) { explained++; continue; }
-            for (CovSites.Region d : sites.regions)
-                if (d.kind() == CovSites.Kind.ENTRY && !found.containsKey(d.id()) && d.file().equals(r.file()) && d.start() <= r.start() && r.end() <= d.end()) { explained++; break; }
-        }
-        int maxSites = found.values().stream().mapToInt(x -> x).max().orElse(0);
-        for (int id : found.keySet()) if (id < 1 || id > sites.regions.size()) unknown++;
-        p("marker audit (bytecode): inserted " + sites.regions.size() + ", distinct ids found " + found.size() + ", call sites " + sitesTotal
-            + ", ids at more than one call site " + dup + " (at most " + maxSites + ")" + ", inserted but missing " + missing + " " + missByKind + " (a missing entry or inside one: " + explained + ")"
-            + ", ids not inserted " + unknown);
     }
 
     // --- ground truth ----------------------------------------------------------------------------------------
