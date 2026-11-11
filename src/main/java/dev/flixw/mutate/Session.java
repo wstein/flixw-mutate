@@ -31,7 +31,7 @@ final class Session implements AutoCloseable {
     private final List<Path> src;
     private final List<Path> tests;
     private final Path work;
-    private final WorkDir workDir;
+    final WorkDir workDir;
     private Thread cleanup;
     private volatile WorkerClient worker;
     private Path loadList;
@@ -48,7 +48,7 @@ final class Session implements AutoCloseable {
     private List<String> testNames = List.of();
     private boolean empty;
 
-    private Session(Engine.Config config, Path root, List<Path> src, List<Path> tests, Path work) {
+    Session(Engine.Config config, Path root, List<Path> src, List<Path> tests, Path work) {
         this.config = config;
         this.root = root;
         this.src = src;
@@ -258,10 +258,21 @@ final class Session implements AutoCloseable {
         return Integer.parseInt(last.field(0));
     }
 
-    private void startWorker() throws Engine.Failure {
+    /** True while a worker process runs (for the tests). */
+    boolean workerAlive() {
+        WorkerClient w = worker;
+        return w != null && w.alive();
+    }
+
+    /**
+     * Starts a worker. It is created inside {@link WorkDir#run}: the process opens worker.log in the work
+     * directory, and a shutdown hook that disposes the directory either waits for this and stops the new worker,
+     * or runs first and refuses it.
+     */
+    void startWorker() throws Engine.Failure {
         if (worker != null) worker.close();
         try {
-            worker = new WorkerClient(config.java(), config.workerClasspath(), Worker.class.getName(), work.resolve("worker.log"));
+            workDir.run(() -> worker = new WorkerClient(config.java(), config.workerClasspath(), Worker.class.getName(), work.resolve("worker.log")));
         } catch (IOException e) {
             throw new Engine.Failure("cannot start the worker (" + config.java() + "): " + e.getMessage());
         }
