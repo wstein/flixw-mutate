@@ -28,8 +28,8 @@ public final class SchemataCompileTest {
             Object r = api.compileAndLoad(List.of(calc, testFile));
             yes(r instanceof FlixApi.Program, "compile failed: " + r);
             List<FlixApi.TestCase> tests = api.tests((FlixApi.Program) r);
-            eq(11, tests.size());
-            for (FlixApi.TestCase t : tests) t.run().run();
+            eq(12, tests.size());
+            for (FlixApi.TestCase t : tests) if (!t.skip()) t.run().run();
         });
 
         System.clearProperty("flixw.mutant");
@@ -41,7 +41,7 @@ public final class SchemataCompileTest {
 
         c.test("with the switch off the tests pass", () -> {
             Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
-            for (FlixApi.TestCase t : api.tests((FlixApi.Program) r)) t.run().run();
+            for (FlixApi.TestCase t : api.tests((FlixApi.Program) r)) if (!t.skip()) t.run().run();
         });
 
         c.test("the right operand of and is evaluated only when needed (switch off)", () -> {
@@ -61,6 +61,7 @@ public final class SchemataCompileTest {
             try {
                 boolean failed = false;
                 for (FlixApi.TestCase t : tests) {
+                    if (t.skip()) continue;
                     try {
                         t.run().run();
                     } catch (RuntimeException | Error e) {

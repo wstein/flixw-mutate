@@ -65,6 +65,27 @@ public final class EngineTest {
             eq(0, r.skippedSites());
         });
 
+        c.test("the skipped test of the fixture is not counted or run", () -> eq(10, Engine.run(config(calc, null)).tests()));
+
+        c.test("a candidate whose text has a comment in the operator gap is left out and counted", () -> {
+            Path root = project("mod A {\n    pub def f(x: Int32): Int32 = x /* c */ + 1\n    pub def g(x: Int32): Int32 = x * 2\n}\n",
+                "mod TestA { @Test def t(): Unit \\ Assert = { Assert.assertEq(expected = 2, A.f(1)); Assert.assertEq(expected = 4, A.g(2)) } }\n");
+            Report r = Engine.run(config(root, null));
+            eq(1, r.skippedSites());
+            eq(1, r.results().size());
+            eq("killed src/A.flix:3:34 * -> /", line(r.results().get(0)));
+        });
+
+        c.test("sources in two files get distinct mutant numbers", () -> {
+            Path root = project("mod A { pub def f(x: Int32): Int32 = x + 1 }\n",
+                "mod TestA { @Test def t(): Unit \\ Assert = { Assert.assertEq(expected = 2, A.f(1)); Assert.assertEq(expected = 4, B.g(2)) } }\n");
+            Files.writeString(root.resolve("src/B.flix"), "mod B { pub def g(x: Int32): Int32 = x * 2 }\n");
+            Report r = Engine.run(config(root, null));
+            eq(2, r.results().size());
+            eq(List.of(1, 2), r.results().stream().map(x -> x.mutant().id()).toList());
+            eq(List.of("killed src/A.flix:1:38 + -> -", "killed src/B.flix:1:38 * -> /"), r.results().stream().map(EngineTest::line).toList());
+        });
+
         c.test("a killed mutant names the failing test", () -> {
             Report r = Engine.run(config(calc, null));
             Result first = r.results().get(1);
