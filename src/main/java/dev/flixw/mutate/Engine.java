@@ -54,6 +54,8 @@ public final class Engine {
         List<Path> src = flixFiles(root.resolve("src"));
         List<Path> tests = flixFiles(root.resolve("test"));
         if (src.isEmpty()) return new Report(List.of(), 0, 0, 0, 0);
+        for (String entry : config.workerClasspath().split(java.io.File.pathSeparator))
+            if (!Files.exists(Path.of(entry))) throw new Failure("class path entry does not exist: " + entry);
         Path work;
         try {
             work = Files.createTempDirectory("flixw-mutate");

@@ -1,6 +1,6 @@
 # flixw-mutate
 
-Mutation testing for [Flix](https://flix.dev) projects, as a [flixw](https://github.com/wstein/flixw) plugin (`./flixw mutate`). Status: design phase; start with the [design document](docs/design/DESIGN.md). A typeset PDF is built by CI (`docs` workflow, `design-pdf` artifact) or locally with `sh scripts/docs.sh`.
+Mutation testing for [Flix](https://flix.dev) projects, as a [flixw](https://github.com/wstein/flixw) plugin (`./flixw mutate`). Status: first version of the engine for functional code (design option 4, mutant schemata); Datalog mutation (option 6) is not built. Start with the [design document](docs/design/DESIGN.md). A typeset PDF is built by CI (`docs` workflow, `design-pdf` artifact) or locally with `sh scripts/docs.sh`.
 
 The rest of this README is the plugin template it was created from.
 
@@ -57,7 +57,30 @@ flixw-mutate plugin=<plugin version> sdk=<pinned SDK commit> flix=<FLIXW_COMPILE
 `plugin` is the JAR's `Implementation-Version`, `sdk` the revision of `sdk-source.properties`
 embedded in the JAR, `flix` the flixw ABI variable. Without a lock the compiler variables are
 absent: exit 2. Unknown arguments are a shell error (exit 2).
-The kit's cache (`KeyedStore`) is embedded but not used yet; the mutation engine is not built.
+The kit's cache (`KeyedStore`) is embedded but not used yet.
+
+## Mutation run (option 4)
+
+```sh
+./flixw mutate [--timeout-ms <ms>] [--fail-on-survived]
+```
+
+The project's `src/**/*.flix` files are mutated, its `test/**/*.flix` files and the `@Test` functions in all
+files are the tests. Sites are picked from the typed AST: comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`),
+numeric `+ - * /`, `and`, `or` and `not`. Each site becomes a call into a generated module `FlixwMutant`
+(a switch read from the JVM property `flixw.mutant` through `unsafe IO`); the operands are not duplicated and
+the right operand of `and`/`or` stays lazy. One worker JVM (the project's Java, with the pinned compiler)
+compiles and loads the rewritten program once; a mutant is a switch number and a rerun of the tests, which
+stops at the first failing test. The report lists every mutant as `killed`, `survived` or `timeout` and the
+score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
+baseline run, at least 2000 ms) ends the worker; the next one loads the program again.
+
+Exit codes: 0 report written, 1 survivors with `--fail-on-survived`, 2 the project does not compile, its tests
+fail without a mutation, it has no tests, or a worker failed.
+
+Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
+operators, Datalog (option 6), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
+`flix.toml` packages. Tested on Flix 0.79.0 only; the compiler is reached by reflection in `FlixApi`.
 
 ## ABI and safety
 
