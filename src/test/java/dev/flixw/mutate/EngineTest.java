@@ -86,6 +86,13 @@ public final class EngineTest {
             eq(List.of("killed src/A.flix:1:38 + -> -", "killed src/B.flix:1:38 * -> /"), r.results().stream().map(EngineTest::line).toList());
         });
 
+        c.test("default timeout: at least 2000 ms, else ten times the baseline", () -> {
+            eq(2000L, Engine.defaultTimeout(0));
+            eq(2000L, Engine.defaultTimeout(200));
+            eq(2010L, Engine.defaultTimeout(201));
+            eq(50_000L, Engine.defaultTimeout(5000));
+        });
+
         c.test("a killed mutant names the failing test", () -> {
             Report r = Engine.run(config(calc, null));
             Result first = r.results().get(1);

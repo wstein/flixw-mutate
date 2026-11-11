@@ -71,6 +71,11 @@ public final class Engine {
         }
     }
 
+    /** The timeout per mutant when none is given: ten times the baseline run, at least 2000 ms. */
+    static long defaultTimeout(long baselineMs) {
+        return Math.max(MIN_TIMEOUT_MS, TIMEOUT_FACTOR * baselineMs);
+    }
+
     private static List<Path> flixFiles(Path dir) throws Failure {
         if (!Files.isDirectory(dir)) return List.of();
         try (Stream<Path> files = Files.walk(dir)) {
@@ -176,7 +181,7 @@ public final class Engine {
                 if (!base.verb().equals("result")) throw failed("the baseline run failed", base);
                 if (base.field(0).equals("killed"))
                     throw new Failure("tests fail without a mutation: " + base.field(1) + ": " + base.field(2));
-                long timeout = config.timeoutMs() != null ? config.timeoutMs() : Math.max(MIN_TIMEOUT_MS, TIMEOUT_FACTOR * baselineMs);
+                long timeout = config.timeoutMs() != null ? config.timeoutMs() : defaultTimeout(baselineMs);
 
                 // 4. The mutants.
                 List<Result> results = new ArrayList<>();
