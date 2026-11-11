@@ -55,4 +55,9 @@ mod TestCalc {
     def testGuarded(): Unit \ {Assert, IO} =
         assertEq(expected = false, CalcGuard.guarded(false, 0));
         assertEq(expected = true, CalcGuard.guarded(true, 5))
+
+    // A skipped test is neither run for the baseline nor for a mutant.
+    @Skip
+    @Test
+    def testSkipped(): Unit \ Assert = assertEq(expected = 1, 2)
 }
