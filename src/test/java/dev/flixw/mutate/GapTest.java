@@ -19,6 +19,21 @@ public final class GapTest {
         c.test("the arrow is not a minus", () -> eq(false, Gap.isOperator(" -> ", "-")));
         c.test("an empty gap", () -> eq(false, Gap.isOperator("", "+")));
         c.test("a word operator inside a name", () -> eq(false, Gap.isOperator(" android ", "and")));
+        c.test("infix: plain operands", () -> eq(true, Gap.fitsInfix("", " + ", "", "+")));
+        c.test("infix: a parenthesized left operand", () -> eq(true, Gap.fitsInfix("(", ") * ", "", "*")));
+        c.test("infix: both operands parenthesized", () -> eq(true, Gap.fitsInfix("(", ") * (", ")", "*")));
+        c.test("infix: two levels", () -> eq(true, Gap.fitsInfix("((", ")) + ((", "))", "+")));
+        c.test("infix: an opening parenthesis without its partner", () -> eq(false, Gap.fitsInfix("(", " + ", "", "+")));
+        c.test("infix: a closing parenthesis without its partner", () -> eq(false, Gap.fitsInfix("", " + ", ")", "+")));
+        c.test("infix: counts differ", () -> eq(false, Gap.fitsInfix("((", ") * ", "", "*")));
+        c.test("infix: a token in the prefix", () -> eq(false, Gap.fitsInfix("f(", ") + ", "", "+")));
+        c.test("infix: a token in the suffix", () -> eq(false, Gap.fitsInfix("", " + ", ".x", "+")));
+        c.test("infix: the operator must match", () -> eq(false, Gap.fitsInfix("", " - ", "", "+")));
+        c.test("unary: plain", () -> eq(true, Gap.fitsUnary("not ", "not", "")));
+        c.test("unary: parenthesized operand", () -> eq(true, Gap.fitsUnary("not (", "not", ")")));
+        c.test("unary: unbalanced", () -> eq(false, Gap.fitsUnary("not (", "not", "")));
+        c.test("unary: another keyword", () -> eq(false, Gap.fitsUnary("nothing ", "not", "")));
+        c.test("unary: a comment after the keyword", () -> eq(false, Gap.fitsUnary("not /* c */ ", "not", "")));
         c.finish();
     }
 }
