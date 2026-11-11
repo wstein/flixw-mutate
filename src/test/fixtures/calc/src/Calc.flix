@@ -22,4 +22,13 @@ mod Calc {
     pub def scale(a: Float64, b: Float64): Float64 = a * b
 
     pub def bigQuotient(a: Bool, n: Int32): Bool = a and 10 / n > 1
+
+    // Datalog is not a site of this engine (design option 6): the guard below must stay untouched.
+    pub def paths(): Vector[(Int32, Int32)] =
+        let p = #{
+            Edge(1, 2). Edge(2, 3).
+            Path(x, y) :- Edge(x, y).
+            Path(x, z) :- Path(x, y), Edge(y, z), if (x < z).
+        };
+        query p select (x, y) from Path(x, y)
 }

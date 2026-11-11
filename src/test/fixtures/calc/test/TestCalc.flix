@@ -41,4 +41,7 @@ mod TestCalc {
         assertEq(expected = false, Calc.bigQuotient(false, 0));
         assertEq(expected = true, Calc.bigQuotient(true, 5));
         assertEq(expected = false, Calc.bigQuotient(true, 20))
+
+    @Test
+    def testPaths(): Unit \ Assert = assertEq(expected = 3, Vector.length(Calc.paths()))
 }
