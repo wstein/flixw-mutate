@@ -5,11 +5,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-
 import java.util.TreeMap;
-
 import java.util.stream.Stream;
 
 /**
@@ -320,11 +319,13 @@ final class Session implements AutoCloseable {
 
     // --- files -----------------------------------------------------------------------------------------------
 
-    private static List<Path> flixFiles(Path dir) throws Engine.Failure {
+    static List<Path> flixFiles(Path dir) throws Engine.Failure {
         if (!Files.isDirectory(dir)) return List.of();
         try (Stream<Path> found = Files.walk(dir)) {
             List<Path> out = found.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".flix"))
-                .map(Path::toAbsolutePath).sorted().toList();
+                .map(Path::toAbsolutePath)
+                .sorted(Comparator.comparing((Path p) -> dir.toAbsolutePath().relativize(p).toString().replace('\\', '/'), SiteTable.FILE_ORDER))
+                .toList();
             for (Path p : out)
                 if (p.toString().contains("\t") || p.toString().contains("\n"))
                     throw new Engine.Failure("a tab or line break in a path is not supported: " + p);

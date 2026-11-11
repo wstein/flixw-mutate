@@ -10,7 +10,13 @@ import java.util.List;
  * are the same in every run of the same sources. Immutable.
  */
 public record SiteTable(List<Point> points) {
-    static final Comparator<Point> ORDER = Comparator.<Point, String>comparing(Point::file)
+    /**
+     * The order of files for switch numbers and ids: the path relative to the project, with '/' as separator,
+     * compared as text. {@code Path} order differs (by bytes on Linux, case-blind with '\\' on Windows).
+     */
+    static final Comparator<String> FILE_ORDER = Comparator.naturalOrder();
+
+    static final Comparator<Point> ORDER = Comparator.<Point, String>comparing(Point::file, FILE_ORDER)
         .thenComparingInt(p -> p.span().start())
         .thenComparingInt(p -> -p.span().end());
 

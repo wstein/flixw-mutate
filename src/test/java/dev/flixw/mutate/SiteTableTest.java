@@ -278,6 +278,66 @@ public final class SiteTableTest {
             eq(a.cardinality() + b.cardinality(), h.union().cardinality());
         });
 
+        c.test("one file order for the switch numbers and the table: the relative path as text, '/' as separator", () -> {
+            // Path order differs from this on Windows (a.flix before B.flix; FooTest.flix before Foo/Bar.flix): the comparator is called directly
+            yes(SiteTable.FILE_ORDER.compare("B.flix", "a.flix") < 0, "upper case before lower case");
+            yes(SiteTable.FILE_ORDER.compare("src/Foo/Bar.flix", "src/FooTest.flix") < 0, "'/' sorts before 'T'");
+            // On Linux the byte order of Path differs from the text order for U+FF5A and U+1F600 (UTF-8 EF.. before F0.., UTF-16 FF5A after D83D)
+            Path dir = Files.createTempDirectory("site-table-order");
+            Path src = Files.createDirectories(dir.resolve("src"));
+            String bmp = "\uFF5A.flix";
+            String astral = new String(Character.toChars(0x1F600)) + ".flix";
+            try {
+                Files.writeString(src.resolve(bmp), "");
+                Files.writeString(src.resolve(astral), "");
+            } catch (java.nio.file.InvalidPathException | java.nio.file.FileSystemException e) {
+                return; // a file system that cannot hold the names: the direct calls above are the test
+            }
+            List<String> names = Session.flixFiles(src).stream().map(p -> p.getFileName().toString()).toList();
+            eq(List.of(astral, bmp), names);
+            List<Point> points = new ArrayList<>();
+            for (String n : names) points.add(new Point(points.size() + 1, Point.Kind.MUTANT, "src/" + n, 1, new Span(0, 1)));
+            eq(2, SiteTable.of(points).size());
+        });
+
+        c.test("a mutant point carries the file, line and span of its site", () -> {
+            Path calc = SiteFinderTest.FIXTURE;
+            Report r = Engine.run(EngineTest.config(calc, null));
+            SiteTable t = r.coverage().sites();
+            eq(r.results().size(), t.size());
+            for (Result x : r.results()) {
+                Point p = t.get(x.mutant().id());
+                eq(Point.Kind.MUTANT, p.kind());
+                eq(x.file(), p.file());
+                eq(Integer.parseInt(x.position().substring(0, x.position().indexOf(':'))), p.line());
+                eq(x.mutant().site().whole(), p.span());
+            }
+        });
+
+        c.test("a point and a hit table reject what they cannot hold", () -> {
+            Span s = new Span(0, 1);
+            throwsA(IllegalArgumentException.class, () -> new Point(-1, Point.Kind.MUTANT, "f", 1, s));
+            throwsA(IllegalArgumentException.class, () -> new Point(1, Point.Kind.MUTANT, "f", 0, s));
+            new Point(0, Point.Kind.MUTANT, "f", 1, s); // a draft id 0 and line 1 are the limits that are valid
+        });
+
+        c.test("a built hit table does not change when the builder goes on, and the union has what any test reached", () -> {
+            SiteTable t = SiteTable.sorted(List.of(draft(Point.Kind.RULE, "r", 1, 0), draft(Point.Kind.RULE, "r", 2, 0)));
+            Hits.Builder b = new Hits.Builder(t, List.of("t1", "t2"));
+            b.reach("t1", 1);
+            Hits h = b.build();
+            b.reach("t1", 2);
+            eq(Hits.NOT_REACHED, h.level("t1", 2));
+            b.reach("t2", 1);
+            Hits h2 = b.build();
+            BitSet u = h2.union();
+            yes(u.get(1) && u.get(2), "id 1 is reached by both tests and stays in the union");
+            eq(2, u.cardinality());
+            BitSet own = h2.idsOf("t1");
+            own.clear();
+            eq(Hits.REACHED, h2.level("t1", 1));
+        });
+
         c.finish();
     }
 }
