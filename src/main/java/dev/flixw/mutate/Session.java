@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -32,8 +31,9 @@ final class Session implements AutoCloseable {
     private final List<Path> src;
     private final List<Path> tests;
     private final Path work;
-    private final Thread cleanup;
-    private WorkerClient worker;
+    private final WorkDir workDir;
+    private Thread cleanup;
+    private volatile WorkerClient worker;
     private Path loadList;
     private Path markerJar;
 
@@ -48,13 +48,13 @@ final class Session implements AutoCloseable {
     private List<String> testNames = List.of();
     private boolean empty;
 
-    private Session(Engine.Config config, Path root, List<Path> src, List<Path> tests, Path work, Thread cleanup) {
+    private Session(Engine.Config config, Path root, List<Path> src, List<Path> tests, Path work) {
         this.config = config;
         this.root = root;
         this.src = src;
         this.tests = tests;
         this.work = work;
-        this.cleanup = cleanup;
+        this.workDir = work == null ? null : new WorkDir(work, this::stopWorker);
     }
 
     // --- numbers of the prepared run -------------------------------------------------------------------------
@@ -85,7 +85,7 @@ final class Session implements AutoCloseable {
         List<Path> src = flixFiles(root.resolve("src"));
         List<Path> tests = flixFiles(root.resolve("test"));
         if (src.isEmpty()) {
-            Session s = new Session(config, root, src, tests, null, null);
+            Session s = new Session(config, root, src, tests, null);
             s.empty = true;
             return s;
         }
@@ -97,10 +97,11 @@ final class Session implements AutoCloseable {
         } catch (IOException e) {
             throw new Engine.Failure("cannot create a work directory: " + e);
         }
-        // A SIGTERM skips the finally block; the worker ends by itself when its stdin closes.
-        Thread cleanup = new Thread(() -> delete(work), "flixw-mutate-cleanup");
-        Runtime.getRuntime().addShutdownHook(cleanup);
-        Session s = new Session(config, root, src, tests, work, cleanup);
+        // A SIGTERM skips the finally block. The hook stops the worker, then deletes the directory, and refuses
+        // later writes of this thread (WorkDir), so no file appears after the delete.
+        Session s = new Session(config, root, src, tests, work);
+        s.cleanup = new Thread(s.workDir::dispose, "flixw-mutate-cleanup");
+        Runtime.getRuntime().addShutdownHook(s.cleanup);
         try {
             s.prepare();
             return s;
@@ -119,7 +120,7 @@ final class Session implements AutoCloseable {
         List<String> lines = new ArrayList<>();
         for (Path p : src) lines.add("M\t" + p);
         for (Path p : tests) lines.add("F\t" + p);
-        Files.write(sitesList, lines, StandardCharsets.UTF_8);
+        workDir.run(() -> Files.write(sitesList, lines, StandardCharsets.UTF_8));
         startWorker();
         List<Protocol.Message> reply = ask(Protocol.encode("sites", sitesList.toString()), SITES_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);
@@ -151,8 +152,11 @@ final class Session implements AutoCloseable {
                     throw new Engine.Failure("cannot rewrite " + root.relativize(p) + ": " + e.getMessage());
                 }
                 target = rendered.resolve(root.relativize(p));
-                Files.createDirectories(target.getParent());
-                Files.writeString(target, r.text(), StandardCharsets.UTF_8);
+                Path out = target;
+                workDir.run(() -> {
+                    Files.createDirectories(out.getParent());
+                    Files.writeString(out, r.text(), StandardCharsets.UTF_8);
+                });
                 for (Mutant m : r.mutants()) {
                     mutants.add(m);
                     positions.put(m.id(), Schemata.position(text, m.site().whole().start()));
@@ -162,12 +166,12 @@ final class Session implements AutoCloseable {
             loadLines.add("F\t" + target);
         }
         Path module = work.resolve("FlixwMutant.flix");
-        Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8);
+        workDir.run(() -> Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8));
         loadLines.add("F\t" + module);
         for (Path p : tests) loadLines.add("F\t" + p);
         markerJar = work.resolve("marker.jar");
         loadList = work.resolve("load.list");
-        Files.write(loadList, loadLines, StandardCharsets.UTF_8);
+        workDir.run(() -> Files.write(loadList, loadLines, StandardCharsets.UTF_8));
 
         // 3. One compile and load; the same switch module answers for the original (switch 0). The baseline run
         // has every switch off and records which test evaluates which site.
@@ -311,19 +315,18 @@ final class Session implements AutoCloseable {
         }
     }
 
-    private static void delete(Path dir) {
-        try (Stream<Path> found = Files.walk(dir)) {
-            found.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
-        } catch (IOException e) {
-            // A leftover temporary directory is not worth failing a finished run.
-        }
+    private void stopWorker() {
+        WorkerClient w = worker;
+        if (w != null) w.close();
     }
 
     @Override
     public void close() {
-        if (worker != null) worker.close();
-        if (work == null) return;
-        delete(work);
+        if (work == null) {
+            stopWorker();
+            return;
+        }
+        workDir.dispose();
         try {
             Runtime.getRuntime().removeShutdownHook(cleanup);
         } catch (IllegalStateException e) {
