@@ -241,7 +241,7 @@ final class Session implements AutoCloseable {
             // The worker was killed; the next one loads the program again.
             startWorker();
             load();
-            return new Result(m, file(m), position(m), Outcome.TIMEOUT, "", selected.size(), selected.size(), testCount);
+            return new Result(m, file(m), position(m), Outcome.TIMEOUT, "", selected.size(), selected.size() /* not measured: upper bound */, testCount);
         }
     }
 
