@@ -31,6 +31,7 @@ public final class GapTest {
         c.test("infix: the operator must match", () -> eq(false, Gap.fitsInfix("", " - ", "", "+")));
         c.test("unary: plain", () -> eq(true, Gap.fitsUnary("not ", "not", "")));
         c.test("unary: parenthesized operand", () -> eq(true, Gap.fitsUnary("not (", "not", ")")));
+        c.test("unary: the keyword is required", () -> eq(false, Gap.fitsUnary("   ", "not", "")));
         c.test("unary: unbalanced", () -> eq(false, Gap.fitsUnary("not (", "not", "")));
         c.test("unary: another keyword", () -> eq(false, Gap.fitsUnary("nothing ", "not", "")));
         c.test("unary: a comment after the keyword", () -> eq(false, Gap.fitsUnary("not /* c */ ", "not", "")));

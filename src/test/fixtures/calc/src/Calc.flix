@@ -31,4 +31,6 @@ mod Calc {
             Path(x, z) :- Path(x, y), Edge(y, z), if (x < z).
         };
         query p select (x, y) from Path(x, y)
+
+    pub def outside(lo: Int32, hi: Int32, x: Int32): Bool = x < lo or x > hi
 }

@@ -50,7 +50,10 @@ public final class SiteFinderTest {
             "22:54 MULTIPLY a * b",
             "24:52 AND a and 10 / n > 1",
             "24:58 GREATER 10 / n > 1",
-            "24:58 DIVIDE 10 / n"), describe(text, r.sites().get(calc.toString()))));
+            "24:58 DIVIDE 10 / n",
+            "35:61 OR x < lo or x > hi",
+            "35:61 LESS x < lo",
+            "35:71 GREATER x > hi"), describe(text, r.sites().get(calc.toString()))));
 
         c.test("only the given file has sites", () -> eq(List.of(calc.toString()), List.copyOf(r.sites().keySet())));
 
