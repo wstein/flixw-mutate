@@ -338,6 +338,45 @@ public final class GenRun {
             }
             p("known limits listed: " + lt + ", tool result differs from the listing: " + lb);
         }
-        return bad + nb + bb + lb + fb;
+        return bad + nb + bb + lb + fb + compareTable(project, m, texts, rel);
+    }
+
+    /**
+     * The same truth read from the site table: the model becomes a SiteTable and Hits, and the views of the table
+     * (not the model) must give the annotated lines, expected-functions.tsv and expected-branches.tsv.
+     */
+    static int compareTable(Path project, CovModel m, Map<String, String> texts, Map<String, String> rel) throws IOException {
+        CovModel.Tabled t = m.tabled(rel);
+        BitSet all = t.hits().union();
+        List<String> wantLines = new ArrayList<>();
+        for (String f : m.files()) {
+            if (rel.get(f).endsWith("/Limits.flix")) continue;
+            String[] ls = texts.get(f).split("\n", -1);
+            for (int i = 0; i < ls.length; i++) {
+                String l = ls[i].stripTrailing();
+                int k = l.lastIndexOf("// ");
+                if (k >= 0 && l.length() == k + 4 && "HMP".indexOf(l.charAt(k + 3)) >= 0)
+                    wantLines.add(Path.of(rel.get(f)).getFileName() + ":" + (i + 1) + ":" + l.charAt(k + 3));
+            }
+        }
+        List<String> gotLines = new ArrayList<>();
+        for (String r : Views.lines(t.sites(), all)) if (!r.startsWith("Limits.flix:")) gotLines.add(r);
+        List<String> wantFn = new ArrayList<>(Files.readAllLines(project.resolve("expected-functions.tsv")).stream().skip(1).toList());
+        List<String> wantBr = new ArrayList<>(Files.readAllLines(project.resolve("expected-branches.tsv")).stream().skip(1).toList());
+        int bad = 0;
+        bad += diff("table lines", wantLines, gotLines);
+        // Limits.flix is outside expected-functions.tsv and expected-branches.tsv (its lines go to expected-limits.tsv)
+        bad += diff("table functions", wantFn, Views.functions(t.sites(), all).stream().filter(r -> !r.startsWith("Limits.flix\t")).toList());
+        bad += diff("table branches", wantBr, Views.branches(t.sites(), all).stream().filter(r -> !r.startsWith("Limits.flix\t")).toList());
+        return bad;
+    }
+
+    private static int diff(String what, List<String> want, List<String> got) {
+        java.util.TreeSet<String> w = new java.util.TreeSet<>(want), g = new java.util.TreeSet<>(got);
+        int bad = 0;
+        for (String x : w) if (!g.contains(x)) { bad++; p("DEVIATION " + what + " missing " + x); }
+        for (String x : g) if (!w.contains(x)) { bad++; p("DEVIATION " + what + " unexpected " + x); }
+        p(what + " from the site table compared: " + w.size() + ", deviating: " + bad);
+        return bad;
     }
 }

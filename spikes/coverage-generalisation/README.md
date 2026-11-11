@@ -44,6 +44,8 @@ JAVA_OPTS=-Dflixw.covcfg.noprov=1 sh spikes/coverage-generalisation/run-datalog.
 MATERIAL="If PSolve Solve.Project Stratification Solve.Simple" REPS=2 sh .../run-datalog.sh material
 ```
 
+Since #30 both harnesses also read the same truth through the engine's `SiteTable`/`Hits`/`Views` (lines `table ... compared:` in the output; the Datalog table covers rules, fact counts and the test without a solve, not the relation sizes).
+
 Both scripts fetch the digest-checked `flix.jar` 0.79.0 (`../common/fetch-flix.sh`), compile with JDK 21 and use the Flix compiler API. Datalog `material` fetches the Flix test files at the pinned revision (`../common/fetch-flix-material.sh`; not copied). flix-invaders: `wstein/flix-invaders` at `5df5ac1312b6216a474ab80bf7dd6556f335e238`, cloned read-only into the scratch directory. Environment of the recorded runs (2026-11-11): Linux 7.2 aarch64 (OrbStack VM), 10 CPUs, 8 GB shared with other jobs, Temurin 21.0.13+9, Flix 0.79.0; load average 6 to 60 during the work (the timing tables name their runs). Counts are exact and repeatable; times are not benchmarks.
 
 ## 1. Functional part
