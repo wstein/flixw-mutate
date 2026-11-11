@@ -94,6 +94,8 @@ final class SiteFinder {
         }
         if (kind == null) return;
         boolean unary = kind == SiteKind.NOT;
+        // isReal/isSynthetic back up fits(): in the probes no operator site had a synthetic location, and a
+        // desugared one would not pass the text checks either; the guard stays as a second defence.
         if (operands.size() != (unary ? 1 : 2) || !isReal(loc)) {
             skipped++;
             return;

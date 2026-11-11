@@ -34,3 +34,12 @@ mod Calc {
 
     pub def outside(lo: Int32, hi: Int32, x: Int32): Bool = x < lo or x > hi
 }
+
+// The right operand of `and` throws when it is evaluated (System.getProperty("") throws IllegalArgumentException; the call has the IO effect, so the
+// compiler keeps it and its order; a pure bug! or an unsafe block may be moved or dropped). Only a lazy right operand passes testGuarded.
+mod CalcGuard {
+    import java.lang.System
+
+    pub def guarded(a: Bool, n: Int32): Bool \ IO =
+        a and (if (n == 0) System.getProperty("") == "x" else true)
+}
