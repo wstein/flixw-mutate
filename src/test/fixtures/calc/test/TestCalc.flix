@@ -11,7 +11,7 @@ mod TestCalc {
     def testSumTo(): Unit \ Assert = assertEq(expected = 6, Calc.sumTo(3))
 
     @Test
-    def testCount(): Unit \ Assert = assertEq(expected = 5, Calc.count(5, 0))
+    def testCount(): Unit \ Assert = assertEq(expected = 5i64, Calc.count(5i64, 0i64))
 
     @Test
     def testParity(): Unit \ Assert =

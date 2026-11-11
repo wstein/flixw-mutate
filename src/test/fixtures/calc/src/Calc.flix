@@ -6,8 +6,9 @@ mod Calc {
     pub def sumTo(n: Int32): Int32 =
         if (n <= 0) 0 else n + sumTo(n - 1)
 
-    pub def count(n: Int32, acc: Int32): Int32 =
-        if (n <= 0) acc else count(n - 1, acc + 1)
+    // Int64: a mutant that counts up instead of down must not end by wrapping around.
+    pub def count(n: Int64, acc: Int64): Int64 =
+        if (n <= 0i64) acc else count(n - 1i64, acc + 1i64)
 
     pub def isEven(n: Int32): Bool = Int32.modulo(n, 2) == 0
 
