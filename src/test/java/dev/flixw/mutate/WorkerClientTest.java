@@ -73,6 +73,12 @@ public final class WorkerClientTest {
             yes(Files.readString(log).contains("fake worker started"), "log: " + Files.readString(log));
         });
 
+        c.test("a huge timeout does not overflow into an immediate one", () -> {
+            try (WorkerClient w = start(dir.resolve("h.log"))) {
+                eq("x", w.request(Protocol.encode("echo", "x"), List.of("done"), Long.MAX_VALUE).get(0).field(0));
+            }
+        });
+
         c.test("close ends the worker", () -> {
             WorkerClient w = start(dir.resolve("g.log"));
             w.request(Protocol.encode("echo", "x"), List.of("done"), 20_000);
