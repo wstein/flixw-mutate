@@ -10,6 +10,14 @@ public final class Gap {
      * ({@code <=} for {@code <}) is false.
      */
     public static boolean isOperator(String gap, String operator) {
-        throw new UnsupportedOperationException("not implemented");
+        int from = 0;
+        int to = gap.length();
+        while (from < to && skippable(gap.charAt(from))) from++;
+        while (to > from && skippable(gap.charAt(to - 1))) to--;
+        return gap.substring(from, to).equals(operator);
+    }
+
+    private static boolean skippable(char c) {
+        return c == '(' || c == ')' || Character.isWhitespace(c);
     }
 }
