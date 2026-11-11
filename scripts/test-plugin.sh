@@ -57,5 +57,32 @@ contains err 'unknown argument: one'
 run 0 --version FLIXW_ABI_VERSION=1
 contains out "flixw-mutate plugin=$version sdk=$revision"
 run 0 --help FLIXW_ABI_VERSION=1
-contains out 'usage: ./flixw mutate [--help | --version]'
+contains out 'usage: ./flixw mutate [--timeout-ms <ms>] [--fail-on-survived] | --help | --version'
+# Options.
+full 2 '--timeout-ms'
+contains err 'usage'
+full 2 '--timeout-ms abc'
+contains err '--timeout-ms'
+full 2 '--timeout-ms 0'
+contains err '--timeout-ms'
+full 2 '--fail-on-survived --fail-on-survived'
+contains err 'unknown argument'
+# An empty project: nothing to mutate, a report with zero mutants.
+full 0 ''
+contains out 'mutants: 0 (killed 0, survived 0, timeout 0)'
+contains out 'mutation score: n/a (no mutants)'
+full 0 '--fail-on-survived'
+# A project with sources and a missing compiler jar is a shell error, not a crash.
+mkdir -p "$work/proj/src"
+printf 'mod A { pub def f(x: Int32): Int32 = x + 1 }\n' > "$work/proj/src/A.flix"
+full 2 '' FLIXW_PROJECT_ROOT="$work/proj"
+contains err 'flixw-mutate:'
+# The planted fixture through the packaged plugin (needs the pinned compiler jar).
+flix_jar=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars}")
+full 0 '' FLIXW_PROJECT_ROOT="$root/src/test/fixtures/calc" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'mutants: 31 (killed 21, survived 9, timeout 1); sites left out: 0'
+contains out 'survived  src/Calc.flix:4:13  < -> <='
+contains out 'timeout   src/Calc.flix:11:39  - -> +'
+full 1 '--fail-on-survived' FLIXW_PROJECT_ROOT="$root/src/test/fixtures/calc" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'mutation score: 71.0%'
 printf 'test-plugin: %s passed, 0 failed\n' "$checks"

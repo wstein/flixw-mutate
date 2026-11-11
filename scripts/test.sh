@@ -8,6 +8,9 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/mutate test.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+# One compiler jar for the engine and plugin tests (digest-checked, cached for this run).
+FLIXW_TEST_JARS=$work/jars
+export FLIXW_TEST_JARS
 sh "$root/scripts/test-workflows.sh"
 sh "$root/scripts/test-signals.sh"
 sh "$root/scripts/test-engine.sh"
