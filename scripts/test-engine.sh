@@ -9,7 +9,9 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/mutate engine.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-find "$root/src/main/java/dev/flixw/mutate" "$root/src/test/java" -name '*.java' | LC_ALL=C sort > "$work/sources.txt"
+# javac reads an @argfile with whitespace separation unless a path is quoted (as package.sh does).
+quote() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'; }
+find "$root/src/main/java/dev/flixw/mutate" "$root/src/test/java" -name '*.java' | LC_ALL=C sort | quote > "$work/sources.txt"
 mkdir -p "$work/classes"
 # Tests that need the Flix compiler find the fixtures and the jar through these variables.
 FLIXW_TEST_FIXTURES=$root/src/test/fixtures
