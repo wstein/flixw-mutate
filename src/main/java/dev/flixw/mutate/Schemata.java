@@ -144,7 +144,21 @@ public final class Schemata {
      * order of the rewrite (start ascending, longer first).
      */
     public static List<Site> usable(List<Site> sites) {
-        throw new UnsupportedOperationException("not implemented");
+        List<Site> sorted = new ArrayList<>(sites);
+        sorted.sort(Comparator.<Site>comparingInt(x -> x.whole().start()).thenComparing(x -> -x.whole().end()));
+        List<Site> kept = new ArrayList<>();
+        List<Site> open = new ArrayList<>();
+        for (Site s : sorted) {
+            Span w = s.whole();
+            while (!open.isEmpty() && open.get(open.size() - 1).whole().end() <= w.start()) open.remove(open.size() - 1);
+            if (!open.isEmpty()) {
+                Site parent = open.get(open.size() - 1);
+                if (!parent.whole().contains(w) || !inOperand(parent, w)) continue;
+            }
+            kept.add(s);
+            open.add(s);
+        }
+        return kept;
     }
 
     /** 1-based line and column of an offset, as {@code line:col}. */
