@@ -85,11 +85,21 @@ public final class GenRun {
         long tFind = ms(t0);
         p("sites: " + sites.regions.size() + " regions (" + count(sites, CovSites.Kind.ENTRY) + " entry, " + count(sites, CovSites.Kind.THEN)
             + " then, " + count(sites, CovSites.Kind.ELSE) + " else, " + count(sites, CovSites.Kind.ARM) + " arm, " + count(sites, CovSites.Kind.LAMBDA)
-            + " lambda), " + sites.execs.size() + " expression starts " + sites.nodeCounts + "; check " + tCheck + " ms, site walk " + tFind + " ms");
+            + " lambda), " + sites.execs.size() + " expression starts " + sites.nodeCounts + ", " + sites.skipped + " left out (unbalanced span)" + "; check " + tCheck + " ms, site walk " + tFind + " ms");
 
         StringBuilder rt = new StringBuilder("id\tkind\tfile\tline\tindex\tstart\tend\n");
         for (CovSites.Region r : sites.regions) rt.append(r.id()).append('\t').append(r.kind()).append('\t').append(rel.get(r.file())).append('\t').append(r.line()).append('\t').append(r.index()).append('\t').append(r.start()).append('\t').append(r.end()).append('\n');
         Files.writeString(work.resolve("regions.tsv"), rt.toString());
+        if ("plain".equals(System.getProperty("cov.only"))) {
+            // run-time baseline in a JVM of its own: the uninstrumented program, per-test times
+            CompilationResult pcr = FlixHost.compile(FlixHost.newFlix(all, List.of()));
+            TreeMap<String, Runnable> pfns = FlixHost.tests(FlixHost.load(pcr));
+            TreeMap<String, List<Long>> pt = new TreeMap<>();
+            for (int rep = 0; rep < reps; rep++)
+                for (var e : pfns.entrySet()) pt.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).add(FlixHost.runOne(e.getKey(), e.getValue(), timeout).nanos());
+            for (var e : pt.entrySet()) p("time " + e.getKey() + ": plain " + stat(e.getValue()) + " (of " + reps + ")");
+            return;
+        }
         // 2. instrumented copies, same file names and line numbers
         Path inst = work.resolve("inst");
         Files.createDirectories(inst.resolve("src"));
@@ -142,6 +152,7 @@ public final class GenRun {
         base = median(suiteTimes);
         p("tests: " + fns.size() + ", outcomes " + count(outcome) + "; suite median of " + reps + ": " + base + " ms (instrumented)");
 
+        if (!plain && !nop) for (var e : instTimes.entrySet()) p("time " + e.getKey() + ": recording marker " + stat(e.getValue()) + " (of " + reps + ")");
         // 5. uninstrumented comparison: same outcomes, run time
         if (plain) {
             t0 = System.nanoTime();
@@ -164,7 +175,7 @@ public final class GenRun {
             p("plain compile " + tPlainCompile + " ms; plain suite median of " + reps + ": " + median(pt) + " ms; outcomes equal to instrumented: " + pout.equals(outcome));
             for (var e : plainTimes.entrySet()) {
                 if (e.getValue().stream().mapToLong(x -> x).max().orElse(0) < 5_000_000 && instTimes.get(e.getKey()).stream().mapToLong(x -> x).max().orElse(0) < 5_000_000) continue;
-                p("time " + e.getKey() + ": plain " + medianUs(e.getValue()) + " us, instrumented " + medianUs(instTimes.get(e.getKey())) + " us (median of " + reps + ")");
+                p("time " + e.getKey() + ": plain " + stat(e.getValue()) + "; instrumented " + stat(instTimes.get(e.getKey())) + " (of " + reps + ")");
             }
             if (!pout.equals(outcome)) {
                 p("RESULT: FAIL instrumented outcomes differ from the plain run");
@@ -173,7 +184,7 @@ public final class GenRun {
         }
 
         if (nop) {
-            for (var e : instTimes.entrySet()) p("time " + e.getKey() + ": nop marker " + medianUs(e.getValue()) + " us (median of " + reps + ")");
+            for (var e : instTimes.entrySet()) p("time " + e.getKey() + ": nop marker " + stat(e.getValue()) + " (of " + reps + ")");
             p("nop marker: model not built");
             return;
         }
@@ -203,6 +214,10 @@ public final class GenRun {
     }
 
     static long count(CovSites s, CovSites.Kind k) { return s.regions.stream().filter(r -> r.kind() == k).count(); }
+
+    static String stat(List<Long> l) {
+        return "median " + medianUs(l) + " us, min " + java.util.Collections.min(l) / 1000 + " us";
+    }
 
     static long medianUs(List<Long> l) { return median(l) / 1000; }
 
@@ -248,10 +263,12 @@ public final class GenRun {
         int dup = 0, sitesTotal = 0, missing = 0, unknown = 0;
         for (var e : found.entrySet()) { sitesTotal += e.getValue(); if (e.getValue() > 1) dup++; }
         List<Integer> miss = new ArrayList<>();
-        for (CovSites.Region r : sites.regions) if (!found.containsKey(r.id())) { missing++; miss.add(r.id()); }
+        TreeMap<String, Integer> missByKind = new TreeMap<>();
+        for (CovSites.Region r : sites.regions) if (!found.containsKey(r.id())) { missing++; miss.add(r.id()); missByKind.merge(r.kind().name(), 1, Integer::sum); }
+        int maxSites = found.values().stream().mapToInt(x -> x).max().orElse(0);
         for (int id : found.keySet()) if (id < 1 || id > sites.regions.size()) unknown++;
         p("marker audit (bytecode): inserted " + sites.regions.size() + ", distinct ids found " + found.size() + ", call sites " + sitesTotal
-            + ", ids at more than one call site " + dup + ", inserted but missing " + missing + (missing > 0 && missing < 20 ? " " + miss : "")
+            + ", ids at more than one call site " + dup + " (at most " + maxSites + ")" + ", inserted but missing " + missing + " " + missByKind
             + ", ids not inserted " + unknown);
     }
 

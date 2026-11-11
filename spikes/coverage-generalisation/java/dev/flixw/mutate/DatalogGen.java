@@ -76,6 +76,9 @@ public final class DatalogGen {
         TreeMap<String, List<Integer>> sourceRules = new TreeMap<>();
         int[] constraints = {0};
         collect(api, checked.root(), src, sourceRules, constraints, new java.util.IdentityHashMap<>());
+        // defs: simple name of the def symbol to its lines (the test that contains a constraint set narrows the candidates)
+        TreeMap<String, int[]> defLines = new TreeMap<>();
+        collectDefs(api, checked.root(), defLines, new java.util.IdentityHashMap<>());
         if (!quiet) out.println("source: " + constraints[0] + " constraints (rules and facts) in fixpoint constraint sets; rule signatures: " + sourceRules);
 
         long t0 = System.nanoTime();
@@ -98,8 +101,8 @@ public final class DatalogGen {
                 out.println("  solve " + n++ + ": " + sv.facts().size() + " facts, " + sv.rules().size() + " rules, tuples first derived from facts: "
                     + sv.edb() + ", relations " + sv.rel());
                 for (Rule ru : sv.rules()) {
-                    List<Integer> lines = sourceRules.get(ru.sig());
-                    out.println("    " + (ru.derived() > 0 ? "fired    " : "not fired") + " derived=" + ru.derived() + "  " + ru.sig()
+                    List<Integer> lines = lines(sourceRules, defLines, e.getKey(), ru.sig());
+                    out.println("    " + (ru.derived() > 0 ? "fired    " : ru.derived() == 0 ? "not fired" : "unknown  ") + " derived=" + (ru.derived() < 0 ? "n/a" : String.valueOf(ru.derived())) + "  " + ru.sig()
                         + "  source line " + (lines == null ? "?" : lines.size() == 1 ? lines.get(0) : "ambiguous " + lines) + "   " + ru.text());
                 }
                 for (String f : sv.facts()) out.println("    fact " + f);
@@ -125,7 +128,7 @@ public final class DatalogGen {
         }
         java.util.Collections.sort(suite);
         // summary over all tests: rules by signature, fired in at least one test, solves, mapping to source lines
-        java.util.TreeSet<String> sigs = new java.util.TreeSet<>(), fired = new java.util.TreeSet<>();
+        java.util.TreeSet<String> sigs = new java.util.TreeSet<>(), fired = new java.util.TreeSet<>(), known = new java.util.TreeSet<>();
         int solvesTotal = 0, withSolve = 0, rulesTotal = 0;
         long facts = 0;
         for (var e : perTest.entrySet()) {
@@ -137,17 +140,20 @@ public final class DatalogGen {
                     rulesTotal++;
                     sigs.add(ru.sig());
                     if (ru.derived() > 0) fired.add(ru.sig());
+                    if (ru.derived() >= 0) known.add(ru.sig());
                 }
             }
         }
-        int unique = 0, ambiguous = 0, unknown = 0;
-        for (String sg : sigs) {
-            List<Integer> l = sourceRules.get(sg);
+        int unique = 0, ambiguous = 0, unknown = 0, uniqueAll = 0;
+        for (var e : perTest.entrySet()) for (Solve sv : e.getValue()) for (Rule ru : sv.rules()) {
+            List<Integer> l = lines(sourceRules, defLines, e.getKey(), ru.sig());
             if (l == null) unknown++; else if (l.size() == 1) unique++; else ambiguous++;
+            List<Integer> g = sourceRules.get(ru.sig());
+            if (g != null && g.size() == 1) uniqueAll++;
         }
         out.println("summary: " + perTest.size() + " tests, " + withSolve + " with a solve, " + solvesTotal + " solves, " + rulesTotal + " rule instances, " + facts
-            + " facts; " + sigs.size() + " distinct rule signatures, fired in some test " + fired.size() + " (never fired: " + (sigs.size() - fired.size()) + "); "
-            + "source line: unique " + unique + ", ambiguous " + ambiguous + ", none " + unknown
+            + " facts; " + sigs.size() + " distinct rule signatures, fired in some test " + fired.size() + ", never fired " + (known.size() - fired.size()) + ", no provenance " + (sigs.size() - known.size()) + "; "
+            + "source line of a rule instance, by signature alone: unique " + uniqueAll + "; narrowed to the test's def: unique " + unique + ", ambiguous " + ambiguous + ", none " + unknown
             + "; suite " + (hooked ? "with the hook" : "stock library") + " median of " + reps + ": " + suite.get(suite.size() / 2) + " ms (min " + suite.get(0) + ")");
         if (expect) {
             int bad = 0, total = 0;
@@ -174,6 +180,28 @@ public final class DatalogGen {
             out.println(bad == 0 ? "RESULT: OK" : "RESULT: FAIL " + bad + " deviations");
             System.exit(bad == 0 ? 0 : 1);
         }
+    }
+
+    /** The source lines of a rule signature; inside the def of the test, if it has constraint sets itself. */
+    static List<Integer> lines(TreeMap<String, List<Integer>> sourceRules, TreeMap<String, int[]> defLines, String test, String sig) {
+        List<Integer> all = sourceRules.get(sig);
+        int[] span = defLines.get(test);
+        if (all == null || span == null) return all;
+        List<Integer> in = new ArrayList<>();
+        for (int l : all) if (l >= span[0] && l <= span[1]) in.add(l);
+        return in.isEmpty() ? all : in;
+    }
+
+    static void collectDefs(FlixApi api, Object node, TreeMap<String, int[]> out, java.util.IdentityHashMap<Object, Boolean> seen) {
+        if (node == null || seen.put(node, Boolean.TRUE) != null) return;
+        String name = FlixApi.nodeName(node);
+        if (name.equals("TypedAst$Def")) {
+            Object loc = FlixApi.call(node, "loc");
+            out.put(String.valueOf(FlixApi.call(node, "sym")), new int[] {(Integer) FlixApi.call(loc, "startLine"), (Integer) FlixApi.call(loc, "endLine")});
+        }
+        if (name.equals("TypedAst$Expr$Fixpoint") || name.startsWith("TypedAst$Expr$Fixpoint")) return;
+        if (name.endsWith("ListMap")) { collectDefs(api, FlixApi.call(node, "m"), out, seen); return; }
+        for (Object c : api.children(node)) collectDefs(api, c, out, seen);
     }
 
     static void reset() {

@@ -17,6 +17,7 @@ final class CovFormats {
             if (hit.isEmpty() && !tn.isEmpty()) continue;
             sb.append("TN:").append(tn).append('\n').append("SF:").append(rel.get(f)).append('\n');
             List<CovSites.Region> fns = m.of(f, CovSites.Kind.ENTRY);
+            fns.sort(java.util.Comparator.comparingInt(CovSites.Region::line));
             int fnh = 0;
             for (CovSites.Region r : fns) sb.append("FN:").append(r.line()).append(',').append(r.name()).append('\n');
             for (CovSites.Region r : fns) {
