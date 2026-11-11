@@ -29,6 +29,8 @@ final class FlixApi {
     /** A checked program: its typed AST (an opaque object) or the errors. */
     record Checked(Object root, Failure failure) {}
 
+    private static final String LIST_MAP = "ca.uwaterloo.flix.util.collection.ListMap";
+
     private final ClassLoader loader;
 
     FlixApi(ClassLoader loader) { this.loader = loader; }
@@ -118,7 +120,11 @@ final class FlixApi {
         return i < 0 ? n : n.substring(i + 1);
     }
 
-    /** The children of a node worth walking: the fields of typed-AST nodes, collections, options and tuples. */
+    /**
+     * The children of a node worth walking: the fields of typed-AST nodes, collections, options, tuples and the
+     * values of a {@code ListMap}. The root keeps the instances (and with them every instance method) in a
+     * {@code ListMap}, which is not an {@code Iterable}; without its values no instance method is visited.
+     */
     List<Object> children(Object node) {
         List<Object> out = new ArrayList<>();
         String cn = node.getClass().getName();
@@ -127,6 +133,8 @@ final class FlixApi {
         } else if (isInstance(node, "scala.collection.Iterable")) {
             Object it = via("scala.collection.Iterable", node, "iterator");
             while ((Boolean) via("scala.collection.Iterator", it, "hasNext")) out.add(via("scala.collection.Iterator", it, "next"));
+        } else if (cn.equals(LIST_MAP)) {
+            out.add(via(LIST_MAP, node, "values"));
         } else if (cn.startsWith("ca.uwaterloo.flix.language.ast.TypedAst$") || cn.startsWith("scala.Tuple")) {
             int arity = (Integer) via("scala.Product", node, "productArity");
             for (int i = 0; i < arity; i++) out.add(via("scala.Product", node, "productElement", i));
