@@ -38,6 +38,9 @@ javac -Xlint:all -Werror --release 21 -d "$classes" @"$sources"
 mkdir -p "$classes/dev/flixw/plugin"
 cp -R "$sdk/kit/resources/." "$classes/"
 cp "$root/sdk-source.properties" "$classes/dev/flixw/plugin/sdk-source.properties"
+# The repository license travels with the jar (the SDK license arrives from kit/resources).
+mkdir -p "$classes/META-INF"
+cp "$root/LICENSE" "$classes/META-INF/LICENSE"
 printf 'Main-Class: dev.flixw.plugin.PluginMain\nImplementation-Version: %s\n' "$version" \
   > "$work/MANIFEST.MF"
 # Entry order and timestamps change a JAR's digest; fix both so one source and version give one digest.

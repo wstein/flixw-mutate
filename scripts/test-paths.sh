@@ -18,7 +18,7 @@ build_and_run() {
   mkdir -p "$work/$1"
   repo=$work/$1/$2
   mkdir -p "$repo"
-  cp -R "$root/scripts" "$root/src" "$root/spikes" "$root/sdk-source.properties" "$repo/"
+  cp -R "$root/scripts" "$root/src" "$root/spikes" "$root/sdk-source.properties" "$root/LICENSE" "$repo/"
   git clone -q --no-checkout "$sdk" "$work/$1/$3"
   git -C "$work/$1/$3" checkout -q --detach "$revision"
   if [ "${5:-}" = relative ]; then
