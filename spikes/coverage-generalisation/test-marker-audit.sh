@@ -1,9 +1,12 @@
 #!/bin/sh
 # Test of the marker audit (flixw-mutate#29): the bytecode of the instrumented program is scanned for the inserted markers
 # and every missing marker is classified (dead function, or live function = failure). Runs run.sh in audit-only mode
-# (-Dcov.auditOnly=true: compile, scan, no test run) on three projects:
+# (-Dcov.auditOnly=true: compile, scan, no test run) on five projects:
 #   audit-live  a live function whose branch the compiler removes: exit 1, one LIVE row
 #   audit-dead  functions no test reaches, one of them without an entry region: exit 0, only dead rows
+#   audit-reach three LIVE rows the audit must not take for dead: an instance def (class name with a numeric suffix), a
+#               dropped (@Inline) def applied by a live def, a dropped def applied only by a test: exit 1
+#   audit-allowed the audit-live case with an allow list (file, kind, line, reason): exit 0, the row is ALLOWED
 #   fixture     the main fixture: exit 0, the entry of Grade.unused is the only missing marker and it is dead
 # Each project has an expected-missing.tsv (the audit's own marker-audit.tsv, compared as a whole).
 # Usage: SPIKE_WORK=<scratch dir> sh spikes/coverage-generalisation/test-marker-audit.sh
@@ -33,7 +36,9 @@ check() {
 }
 
 check audit-live 1 'MISSING MARKER in a live function: ELSE src/Fold.flix:5 in Fold.lit'
-check audit-dead 0 'LIVE function 0'
+check audit-dead 0 'inside a dead function 9, allowed 0, LIVE function 0'
+check audit-reach 1 'MISSING MARKER in a live function: ELSE src/Reach.flix:28 in Direct.only'
+check audit-allowed 0 'allowed 1, LIVE function 0'
 check fixture 0 'LIVE function 0'
 echo "marker audit: $pass passed, $fail failed"
 [ "$fail" = 0 ]

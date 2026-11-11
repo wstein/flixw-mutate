@@ -1,9 +1,16 @@
 id	kind	file	line	function	class	cause
-1	ENTRY	src/Cold.flix	5	Cold.helper	DEAD_ENTRY	no class Def$helper; callers all dropped: Cold.top
-2	THEN	src/Cold.flix	6	Cold.helper	IN_DEAD	no class Def$helper; callers all dropped: Cold.top
-3	ELSE	src/Cold.flix	6	Cold.helper	IN_DEAD	no class Def$helper; callers all dropped: Cold.top
+1	ENTRY	src/Cold.flix	5	Cold.helper	DEAD_ENTRY	no class Def$helper; callers all dead: Cold.top
+2	THEN	src/Cold.flix	6	Cold.helper	IN_DEAD	no class Def$helper; callers all dead: Cold.top
+3	ELSE	src/Cold.flix	6	Cold.helper	IN_DEAD	no class Def$helper; callers all dead: Cold.top
 4	ENTRY	src/Cold.flix	8	Cold.top	DEAD_ENTRY	no class Def$top; no caller
 5	LAMBDA	src/Cold.flix	9	Cold.top	IN_DEAD	no class Def$top; no caller
-6	ENTRY	src/Cold.flix	11	Cold.scale	DEAD_ENTRY	no class Def$scale; callers all dropped: Cold.knobs
-7	LAMBDA	src/Cold.flix	15	Cold.knobs	IN_DEAD	no class Def$knobs; no caller
-8	LAMBDA	src/Cold.flix	18	Cold.knobs	IN_DEAD	no class Def$knobs; no caller
+6	ENTRY	src/Cold.flix	12	Cold.ping	DEAD_ENTRY	no class Def$ping; callers all dead: Cold.pong, Cold.start
+7	THEN	src/Cold.flix	12	Cold.ping	IN_DEAD	no class Def$ping; callers all dead: Cold.pong, Cold.start
+8	ELSE	src/Cold.flix	12	Cold.ping	IN_DEAD	no class Def$ping; callers all dead: Cold.pong, Cold.start
+9	ENTRY	src/Cold.flix	14	Cold.pong	DEAD_ENTRY	no class Def$pong; callers all dead: Cold.ping
+10	THEN	src/Cold.flix	14	Cold.pong	IN_DEAD	no class Def$pong; callers all dead: Cold.ping
+11	ELSE	src/Cold.flix	14	Cold.pong	IN_DEAD	no class Def$pong; callers all dead: Cold.ping
+12	ENTRY	src/Cold.flix	16	Cold.start	DEAD_ENTRY	no class Def$start; no caller
+13	ENTRY	src/Cold.flix	18	Cold.scale	DEAD_ENTRY	no class Def$scale; callers all dead: Cold.knobs
+14	LAMBDA	src/Cold.flix	22	Cold.knobs	IN_DEAD	no class Def$knobs; no caller
+15	LAMBDA	src/Cold.flix	25	Cold.knobs	IN_DEAD	no class Def$knobs; no caller

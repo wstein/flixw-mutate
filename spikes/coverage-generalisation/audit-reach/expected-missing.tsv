@@ -1,0 +1,4 @@
+id	kind	file	line	function	class	cause
+3	ELSE	src/Reach.flix	13	Geo.area	LIVE	function is in the bytecode
+6	ELSE	src/Reach.flix	20	Nested.inner	LIVE	no class Def$inner but applied by live code (inlined?): Nested.outer
+10	ELSE	src/Reach.flix	28	Direct.only	LIVE	no class Def$only but applied by live code (inlined?): TestReach.testOnly

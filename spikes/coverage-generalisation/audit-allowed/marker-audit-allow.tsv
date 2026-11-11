@@ -1,0 +1,2 @@
+file	kind	line	reason
+src/Fold.flix	ELSE	5	The condition is the literal true; the else branch is unreachable by construction (fixture).
