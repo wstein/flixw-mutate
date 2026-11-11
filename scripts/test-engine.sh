@@ -15,8 +15,10 @@ find "$root/src/main/java/dev/flixw/mutate" "$root/src/test/java" -name '*.java'
 mkdir -p "$work/classes"
 # Tests that need the Flix compiler find the fixtures and the jar through these variables.
 FLIXW_TEST_FIXTURES=$root/src/test/fixtures
+# The wide fixture of the coverage spike (selection tests).
+FLIXW_TEST_WIDE=$root/spikes/coverage-selection/fixture-wide
 FLIXW_TEST_FLIX_JAR=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars}")
-export FLIXW_TEST_FIXTURES FLIXW_TEST_FLIX_JAR
+export FLIXW_TEST_FIXTURES FLIXW_TEST_WIDE FLIXW_TEST_FLIX_JAR
 javac -Xlint:all -Werror --release 21 -d "$work/classes" @"$work/sources.txt"
 total=0
 bad=0
