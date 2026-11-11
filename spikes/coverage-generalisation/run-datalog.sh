@@ -36,5 +36,5 @@ fi
 if [ "$#" -gt 0 ]; then p=$1; shift; else p=$here/datalog-fixture; set -- expect; fi
 name=$(basename "$p")
 echo "== $p"
-exec java -Xmx"${XMX:-1500m}" -Xss16m ${JAVA_OPTS:-} -cp "$classes:$jar" dev.flixw.spike.GenLauncher \
+exec java -Xmx"${XMX:-1500m}" -Xss16m -Ddl.lcov="$work/dl-$name/datalog.lcov.info" ${JAVA_OPTS:-} -cp "$classes:$jar" dev.flixw.spike.GenLauncher \
   "$jar" "$classes" "$work/dl-$name" "${HOOK:-$here/datalog/CovHook.flix}" dev.flixw.mutate.DatalogGen "$p" "${TIMEOUT_MS:-20000}" "$@" 2> "$work/stderr-dl-$name.log"

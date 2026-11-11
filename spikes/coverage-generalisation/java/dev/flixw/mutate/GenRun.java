@@ -95,9 +95,14 @@ public final class GenRun {
             CompilationResult pcr = FlixHost.compile(FlixHost.newFlix(all, List.of()));
             TreeMap<String, Runnable> pfns = FlixHost.tests(FlixHost.load(pcr));
             TreeMap<String, List<Long>> pt = new TreeMap<>();
-            for (int rep = 0; rep < reps; rep++)
+            List<Long> suite = new ArrayList<>();
+            for (int rep = 0; rep < reps; rep++) {
+                long s0 = System.nanoTime();
                 for (var e : pfns.entrySet()) pt.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).add(FlixHost.runOne(e.getKey(), e.getValue(), timeout).nanos());
-            for (var e : pt.entrySet()) p("time " + e.getKey() + ": plain " + stat(e.getValue()) + " (of " + reps + ")");
+                suite.add(ms(s0));
+            }
+            if (pt.size() <= 30) for (var e : pt.entrySet()) p("time " + e.getKey() + ": plain " + stat(e.getValue()) + " (of " + reps + ")");
+            p("tests: " + pfns.size() + ", plain suite median of " + reps + ": " + median(suite) + " ms, min " + java.util.Collections.min(suite) + " ms");
             return;
         }
         // 2. instrumented copies, same file names and line numbers
@@ -150,9 +155,9 @@ public final class GenRun {
             suiteTimes.add(ms(s));
         }
         base = median(suiteTimes);
-        p("tests: " + fns.size() + ", outcomes " + count(outcome) + "; suite median of " + reps + ": " + base + " ms (instrumented)");
+        p("tests: " + fns.size() + ", outcomes " + count(outcome) + "; suite median of " + reps + ": " + base + " ms, min " + java.util.Collections.min(suiteTimes) + " ms (instrumented)");
 
-        if (!plain && !nop) for (var e : instTimes.entrySet()) p("time " + e.getKey() + ": recording marker " + stat(e.getValue()) + " (of " + reps + ")");
+        if (!plain && !nop && instTimes.size() <= 30) for (var e : instTimes.entrySet()) p("time " + e.getKey() + ": recording marker " + stat(e.getValue()) + " (of " + reps + ")");
         // 5. uninstrumented comparison: same outcomes, run time
         if (plain) {
             t0 = System.nanoTime();
@@ -265,10 +270,18 @@ public final class GenRun {
         List<Integer> miss = new ArrayList<>();
         TreeMap<String, Integer> missByKind = new TreeMap<>();
         for (CovSites.Region r : sites.regions) if (!found.containsKey(r.id())) { missing++; miss.add(r.id()); missByKind.merge(r.kind().name(), 1, Integer::sum); }
+        // A missing region inside a missing function entry is explained by a dropped function; the others by the optimiser's removal of a branch or lambda.
+        int explained = 0;
+        for (CovSites.Region r : sites.regions) {
+            if (found.containsKey(r.id())) continue;
+            if (r.kind() == CovSites.Kind.ENTRY) { explained++; continue; }
+            for (CovSites.Region d : sites.regions)
+                if (d.kind() == CovSites.Kind.ENTRY && !found.containsKey(d.id()) && d.file().equals(r.file()) && d.start() <= r.start() && r.end() <= d.end()) { explained++; break; }
+        }
         int maxSites = found.values().stream().mapToInt(x -> x).max().orElse(0);
         for (int id : found.keySet()) if (id < 1 || id > sites.regions.size()) unknown++;
         p("marker audit (bytecode): inserted " + sites.regions.size() + ", distinct ids found " + found.size() + ", call sites " + sitesTotal
-            + ", ids at more than one call site " + dup + " (at most " + maxSites + ")" + ", inserted but missing " + missing + " " + missByKind
+            + ", ids at more than one call site " + dup + " (at most " + maxSites + ")" + ", inserted but missing " + missing + " " + missByKind + " (a missing entry or inside one: " + explained + ")"
             + ", ids not inserted " + unknown);
     }
 
@@ -278,6 +291,7 @@ public final class GenRun {
         int bad = 0, total = 0;
         BitSet all = m.all();
         for (String f : m.files()) {
+            if (rel.get(f).endsWith("/Limits.flix")) continue; // compared with expected-limits.tsv below
             TreeMap<Integer, Character> got = m.lines(f, all);
             TreeMap<Integer, Character> want = new TreeMap<>();
             String[] ls = texts.get(f).split("\n", -1);
@@ -319,6 +333,22 @@ public final class GenRun {
             if (g == null || g != c[4].equals("1")) { bb++; p("DEVIATION branch " + c[0] + ":" + c[1] + " " + c[2] + " " + c[3] + " expected " + c[4] + " got " + g); }
         }
         p("branches compared: " + bt + ", deviating: " + bb);
-        return bad + nb + bb;
+        // known limits: lines where the tool is expected to differ from the truth, as listed
+        int lt = 0, lb = 0;
+        java.nio.file.Path limits = project.resolve("expected-limits.tsv");
+        if (Files.exists(limits)) {
+            for (String l : Files.readAllLines(limits).subList(1, Files.readAllLines(limits).size())) {
+                String[] c = l.split("\t");
+                lt++;
+                Character g = null;
+                for (String f : m.files()) if (rel.get(f).endsWith("/" + c[0])) g = m.lines(f, all).get(Integer.parseInt(c[1]));
+                if (g == null || g != c[3].charAt(0) || c[2].equals(c[3])) {
+                    lb++;
+                    p("DEVIATION limit " + c[0] + ":" + c[1] + " truth " + c[2] + ", tool expected " + c[3] + ", got " + g);
+                }
+            }
+            p("known limits listed: " + lt + ", tool result differs from the listing: " + lb);
+        }
+        return bad + nb + bb + lb;
     }
 }
