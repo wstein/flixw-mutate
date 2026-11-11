@@ -119,6 +119,18 @@ public final class EngineTest {
             yes(f != null && f.getMessage().contains("no tests"), String.valueOf(f));
         });
 
+        c.test("a missing class path entry is named before the worker starts", () -> {
+            Path root = project("mod A { pub def f(x: Int32): Int32 = x + 1 }\n", "mod TestA { }\n");
+            Engine.Failure f = null;
+            try {
+                Engine.run(new Engine.Config(root, JAVA, CP + java.io.File.pathSeparator + "/nonexistent/flix.jar", null));
+            } catch (Engine.Failure e) {
+                f = e;
+            }
+            yes(f != null && f.getMessage().contains("/nonexistent/flix.jar") && f.getMessage().contains("does not exist"),
+                String.valueOf(f));
+        });
+
         c.test("a worker that cannot start is a failure", () -> {
             Path root = project("mod A { pub def f(x: Int32): Int32 = x + 1 }\n", "mod TestA { }\n");
             throwsA(Engine.Failure.class, () -> Engine.run(new Engine.Config(root, Path.of("/nonexistent/java"), CP, null)));
