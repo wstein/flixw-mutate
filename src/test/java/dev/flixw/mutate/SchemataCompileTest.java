@@ -28,7 +28,7 @@ public final class SchemataCompileTest {
             Object r = api.compileAndLoad(List.of(calc, testFile));
             yes(r instanceof FlixApi.Program, "compile failed: " + r);
             List<FlixApi.TestCase> tests = api.tests((FlixApi.Program) r);
-            eq(9, tests.size());
+            eq(10, tests.size());
             for (FlixApi.TestCase t : tests) t.run().run();
         });
 

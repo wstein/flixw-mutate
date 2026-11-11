@@ -44,4 +44,10 @@ mod TestCalc {
 
     @Test
     def testPaths(): Unit \ Assert = assertEq(expected = 3, Vector.length(Calc.paths()))
+
+    @Test
+    def testOutside(): Unit \ Assert =
+        assertEq(expected = true, Calc.outside(1, 3, 0));
+        assertEq(expected = true, Calc.outside(1, 3, 4));
+        assertEq(expected = false, Calc.outside(1, 3, 2))
 }
