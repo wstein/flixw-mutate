@@ -57,7 +57,7 @@ contains err 'unknown argument: one'
 run 0 --version FLIXW_ABI_VERSION=1
 contains out "flixw-mutate plugin=$version sdk=$revision"
 run 0 --help FLIXW_ABI_VERSION=1
-contains out 'usage: ./flixw mutate [--timeout-ms <ms>] [--fail-on-survived] | --help | --version'
+contains out 'usage: ./flixw mutate [--timeout-ms <ms>] [--no-selection] [--fail-on-survived] | --help | --version'
 # Options.
 full 2 '--timeout-ms'
 contains err 'usage'
@@ -67,11 +67,13 @@ full 2 '--timeout-ms 0'
 contains err '--timeout-ms'
 full 2 '--fail-on-survived --fail-on-survived'
 contains err '--fail-on-survived given twice'
+full 2 '--no-selection --no-selection'
+contains err '--no-selection given twice'
 full 2 '--timeout-ms 5 --timeout-ms 6'
 contains err '--timeout-ms given twice'
 # An empty project: nothing to mutate, a report with zero mutants.
 full 0 ''
-contains out 'mutants: 0 (killed 0, survived 0, timeout 0)'
+contains out 'mutants: 0 (killed 0, survived 0, not covered 0, timeout 0)'
 contains out 'mutation score: n/a (no mutants)'
 full 0 '--fail-on-survived'
 # A project with sources and a missing compiler jar is a shell error, not a crash.
@@ -86,10 +88,16 @@ flix_jar=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars
 # The project is copied: the engine refuses a tab or line break in a project path, the repository path may have one.
 cp -R "$root/src/test/fixtures/calc" "$work/calc"
 full 0 '' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
-contains out 'mutants: 34 (killed 23, survived 10, timeout 1); sites left out: 0'
-contains out 'survived  src/Calc.flix:4:13  < -> <='
-contains out 'timeout   src/Calc.flix:11:39  - -> +'
+contains out 'mutants: 34 (killed 23, survived 9, not covered 1, timeout 1); sites left out: 0'
+contains out 'survived    src/Calc.flix:4:13  < -> <='
+contains out 'not covered src/Calc.flix:45:28  == -> !='
+contains out 'timeout     src/Calc.flix:11:39  - -> +'
+contains out 'test selection: on; tests per mutant:'
 full 1 '--fail-on-survived' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
 contains out 'mutation score: 70.6%'
+# Without selection every mutant runs every test: the survivors are the 10 of the full run.
+full 0 '--no-selection' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'mutants: 34 (killed 23, survived 10, not covered 0, timeout 1); sites left out: 0'
+contains out 'test selection: off'
 fi
 printf 'test-plugin: %s passed, 0 failed\n' "$checks"
