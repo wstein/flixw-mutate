@@ -6,7 +6,7 @@
 //   flixw.cov.solves          number of solves since the last reset
 //   flixw.cov.N.rules         count of rules; flixw.cov.N.rule.I  text of rule I
 //   flixw.cov.N.facts         count of facts; flixw.cov.N.fact.J  text of fact J (a constraint without a body)
-//   flixw.cov.N.derived       counts per rule, "edb,r0,r1,...": model tuples whose first derivation is that rule
+//   flixw.cov.N.derived       (not with -Dflixw.covcfg.noprov=1, nor with lattice predicates) counts per rule, "edb,r0,r1,...": model tuples whose first derivation is that rule
 //                             (edb: tuples of the facts and of an injected model), from a second solve with provenance
 //   flixw.cov.N.rel           "Name=count,..." tuples per relation in the model
 mod FlixwCovHook {
@@ -25,7 +25,8 @@ mod FlixwCovHook {
                     let t3 = fwSet("flixw.cov.${n}.facts", "${Vector.length(facts)}");
                     let t4 = Vector.mapWithIndex((i, c) -> fwSet("flixw.cov.${n}.rule.${i}", fwText(c)) + fwSet("flixw.cov.${n}.sig.${i}", fwSig(c)), rules);
                     let t5 = Vector.mapWithIndex((i, c) -> fwSet("flixw.cov.${n}.fact.${i}", fwText(c)), facts);
-                    let prov = runSolverInternal0(true, d);
+                    // Lattice predicates: the provenance solve raised errors and, in Solve.Simple, did not terminate (README).
+                    let prov = if (fwHasLattice(rules) or fwGetInt("flixw.covcfg.noprov") == 1) m else runSolverInternal0(true, d);
                     let t6 = fwRecord(n, Vector.length(rules), prov);
                     if (t1 + t2 + t3 + Vector.length(t4) + Vector.length(t5) + t6 < 0) bug!("flixw-cov") else m
                 }
@@ -41,6 +42,23 @@ mod FlixwCovHook {
     /// with the constraint set inside (`query p select ...`) has the program's rules and one `$Result` rule: it is recorded.
     def fwOnlyResult(rules: Vector[Fixpoint3.Ast.Datalog.Constraint]): Bool =
         Vector.forAll(match Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _), _) -> name == "$Result", rules)
+
+    def fwHasLattice(rules: Vector[Fixpoint3.Ast.Datalog.Constraint]): Bool = Vector.exists(fwConstraintLat, rules)
+
+    def fwConstraintLat(c: Fixpoint3.Ast.Datalog.Constraint): Bool = match c {
+        case Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(_, den, _), body) =>
+            fwIsLat(den) or Vector.exists(fwBodyLat, body)
+    }
+
+    def fwBodyLat(b: Fixpoint3.Ast.Datalog.BodyPredicate): Bool = match b {
+        case Fixpoint3.Ast.Datalog.BodyPredicate.BodyAtom(_, den, _, _, _) => fwIsLat(den)
+        case _ => false
+    }
+
+    def fwIsLat(d: Fixpoint3.Ast.Shared.BoxedDenotation): Bool = match d {
+        case Fixpoint3.Ast.Shared.Denotation.Latticenal(_, _, _, _) => true
+        case _ => false
+    }
 
     def fwRecord(n: Int32, nRules: Int32, prov: Fixpoint3.Ast.Datalog.Datalog): Int32 = match prov {
         case Fixpoint3.Ast.Datalog.Datalog.Provenance(_, model) => unsafe IO {
