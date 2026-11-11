@@ -24,8 +24,6 @@ final class WorkDir {
         this.stopWriters = stopWriters;
     }
 
-    Path path() { return dir; }
-
     /** Runs a write into the directory; refused with an {@link IOException} after {@link #dispose}. */
     synchronized void run(Write write) throws IOException {
         if (disposed) throw new IOException("the work directory is already removed");
