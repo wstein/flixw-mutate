@@ -1,5 +1,5 @@
 #!/bin/sh
-# Inspect the single plugin artifact: kit classes, the SDK license and the pin must be embedded.
+# Inspect the single plugin artifact: kit classes, both licenses and the pin must be embedded.
 set -eu
 plugin=${1:?usage: sh scripts/check-sdk-package.sh plugin.jar}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
@@ -12,6 +12,11 @@ for class in Context Usage Launcher InspectionLoader AtomicOutput KeyedStore Pro
 done
 unzip -p "$plugin" META-INF/LICENSE-flixw-plugin-sdk | grep -q 'Apache License' || {
   echo 'sdk-package: missing SDK license' >&2; exit 1;
+}
+checks=$((checks + 1))
+# The repository license must travel with the jar, byte for byte.
+unzip -p "$plugin" META-INF/LICENSE | cmp -s - "$root/LICENSE" || {
+  echo 'sdk-package: META-INF/LICENSE is missing or differs from LICENSE' >&2; exit 1;
 }
 checks=$((checks + 1))
 # The header reads the pin from the artifact, so it must be the pin of the source tree.
