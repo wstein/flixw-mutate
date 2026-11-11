@@ -116,6 +116,14 @@ public final class SelectionTest {
             yes(chosen * 5 < fullMeasured, "selected " + chosen + " against full " + fullMeasured);
         });
 
+        c.test("instances: the selected run and the full run give the same outcome for every mutant", () -> {
+            Report full = Engine.run(config(SiteFinderTest.INSTANCES).withoutSelection());
+            Report selected = Engine.run(config(SiteFinderTest.INSTANCES));
+            eq(List.of(), differences(full, selected));
+            eq(9, selected.results().size());
+            eq(0, selected.count(Outcome.NOT_COVERED));
+        });
+
         c.test("wide: the selected run and the full run give the same outcome for every mutant", () -> {
             Report full = Engine.run(config(WIDE).withoutSelection());
             Report selected = Engine.run(config(WIDE));
