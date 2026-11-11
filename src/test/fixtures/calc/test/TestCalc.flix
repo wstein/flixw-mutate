@@ -50,4 +50,9 @@ mod TestCalc {
         assertEq(expected = true, Calc.outside(1, 3, 0));
         assertEq(expected = true, Calc.outside(1, 3, 4));
         assertEq(expected = false, Calc.outside(1, 3, 2))
+
+    @Test
+    def testGuarded(): Unit \ {Assert, IO} =
+        assertEq(expected = false, CalcGuard.guarded(false, 0));
+        assertEq(expected = true, CalcGuard.guarded(true, 5))
 }
