@@ -99,5 +99,13 @@ contains out 'mutation score: 70.6%'
 full 0 '--no-selection' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
 contains out 'mutants: 34 (killed 23, survived 10, not covered 0, timeout 1); sites left out: 0'
 contains out 'test selection: off'
+# A project whose only unkilled mutant is `not covered` (g is never called): --fail-on-survived must still exit 1.
+mkdir -p "$work/uncovered/src" "$work/uncovered/test"
+printf 'mod A {\n    pub def f(x: Int32): Int32 = x + 1\n    pub def g(x: Int32): Int32 = x * 2\n}\n' > "$work/uncovered/src/A.flix"
+printf 'mod TestA { @Test def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.f(1)) }\n' > "$work/uncovered/test/TestA.flix"
+full 0 '' FLIXW_PROJECT_ROOT="$work/uncovered" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'mutants: 2 (killed 1, survived 0, not covered 1, timeout 0); sites left out: 0'
+full 1 '--fail-on-survived' FLIXW_PROJECT_ROOT="$work/uncovered" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'not covered src/A.flix:3:'
 fi
 printf 'test-plugin: %s passed, 0 failed\n' "$checks"
