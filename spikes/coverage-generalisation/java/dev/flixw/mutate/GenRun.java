@@ -172,7 +172,11 @@ public final class GenRun {
             }
         }
 
-        if (nop) { p("nop marker: model not built"); return; }
+        if (nop) {
+            for (var e : instTimes.entrySet()) p("time " + e.getKey() + ": nop marker " + medianUs(e.getValue()) + " us (median of " + reps + ")");
+            p("nop marker: model not built");
+            return;
+        }
         // 6. outputs
         BitSet allHits = model.all();
         Files.writeString(work.resolve("lcov.info"), CovFormats.lcov(model, allHits, "", rel));

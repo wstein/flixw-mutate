@@ -60,7 +60,7 @@ final class CovFormats {
                 esc(rel.get(f)), esc(rel.get(f)), rate(fc, fl), rate(fbc, fb)));
             classes.append("        <methods>\n");
             for (CovSites.Region r : m.of(f, CovSites.Kind.ENTRY)) {
-                classes.append(String.format(Locale.ROOT, "          <method name=\"%s\" signature=\"\" line-rate=\"%s\" branch-rate=\"0\">\n"
+                classes.append(String.format(Locale.ROOT, "          <method name=\"%s\" signature=\"\" line-rate=\"%s\" branch-rate=\"0\" complexity=\"0\">\n"
                     + "            <lines><line number=\"%d\" hits=\"%d\" branch=\"false\"/></lines>\n          </method>\n",
                     esc(r.name()), hit.get(r.id()) ? "1" : "0", r.line(), hit.get(r.id()) ? 1 : 0));
             }
