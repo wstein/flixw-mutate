@@ -21,6 +21,9 @@ public final class SiteFinderTest {
         return SiteFinder.find(api, checked.root(), Map.of(calc.toString(), calcText));
     }
 
+    /** The fixture with sites in instance methods, trait default implementations and an effect handler. */
+    static final Path INSTANCES = Path.of(System.getenv("FLIXW_TEST_FIXTURES")).resolve("instances").toAbsolutePath();
+
     static List<String> describe(String text, List<Site> sites) {
         return sites.stream().map(s -> Schemata.position(text, s.whole().start()) + " " + s.kind() + " "
             + text.substring(s.whole().start(), s.whole().end())).toList();
@@ -76,6 +79,21 @@ public final class SiteFinderTest {
             FlixApi api = new FlixApi(SiteFinderTest.class.getClassLoader());
             FlixApi.Checked checked = api.check(List.of(calc, FIXTURE.resolve("test/TestCalc.flix")));
             eq(Map.of(), SiteFinder.find(api, checked.root(), Map.of("elsewhere.flix", "")).sites());
+        });
+
+        c.test("sites in instance methods, trait default implementations and an effect handler are found", () -> {
+            Path shapes = INSTANCES.resolve("src/Shapes.flix");
+            String shapesText = Files.readString(shapes);
+            SiteFinder.Result inst = findInFixture(shapesText, shapes, List.of(INSTANCES.resolve("test/TestShapes.flix")));
+            eq(List.of(
+                "8:37 GREATER Sized.size(x) > 10",
+                "9:38 ADD Sized.size(x) + Sized.size(x)",
+                "14:36 LESS n < 0",
+                "14:50 MULTIPLY n * 2",
+                "21:29 SUBTRACT Sized.size(v) - 1",
+                "30:15 ADD Counter.next() + Counter.next()",
+                "31:29 ADD 1 + 2"), describe(shapesText, inst.sites().get(shapes.toString())));
+            eq(0, inst.skipped());
         });
 
         c.test("offset: 1-based line and column", () -> {
