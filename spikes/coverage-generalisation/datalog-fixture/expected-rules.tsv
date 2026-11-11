@@ -1,0 +1,7 @@
+test	rule	derived	source_line
+TestNet.testReachable	Reach<-Start	1	9
+TestNet.testReachable	Reach<-Reach,Edge	2	10
+TestNet.testReachable	Dead<-Reach,Edge	0	11
+TestNet.testReachable	Lone<-Edge,Reach	1	12
+TestNet.testEvens	Even<-Num	2	21
+TestNet.testEvens	$Result<-Even	2	23
