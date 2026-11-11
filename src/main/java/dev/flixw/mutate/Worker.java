@@ -30,7 +30,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *   {@code compile-error}.
  * <li>{@code run <n> [<test>...]}: sets the switch to mutant {@code n} (0: none), runs the named tests in the
  *   given order (all tests in name order without names) and stops at the first failure:
- *   {@code result survived} or {@code result killed <test> <description>}.
+ *   {@code result survived <tests run>} or {@code result killed <test> <description> <tests run>}.
  * <li>{@code baseline [<test>...]}: runs like {@code run 0} with the markers recording: one
  *   {@code covered <test> <switch>...} message per test, then the result.
  * </ul>
@@ -160,12 +160,14 @@ public final class Worker {
     }
 
     private void runAll(List<FlixApi.TestCase> selected, boolean record) {
+        int ran = 0;
         for (FlixApi.TestCase t : selected) {
             if (record) MarkerState.clear();
+            ran++;
             try {
                 t.run().run();
             } catch (RuntimeException | Error e) {
-                out.println(Protocol.encode("result", "killed", t.name(), describe(e)));
+                out.println(Protocol.encode("result", "killed", t.name(), describe(e), String.valueOf(ran)));
                 return;
             }
             if (record) {
@@ -176,7 +178,7 @@ public final class Worker {
                 out.println(Protocol.encode("covered", fields));
             }
         }
-        out.println(Protocol.encode("result", "survived"));
+        out.println(Protocol.encode("result", "survived", String.valueOf(ran)));
     }
 
     /** One line for a failure: class and first message line without terminal colour codes, at most 160 chars. */
