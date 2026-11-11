@@ -8,7 +8,7 @@ Can the marker approach of #18 be generalised to test coverage of functional Fli
 
 ## Result in short
 
-- Functional: regions (function entry, `if` branch, `match` arm, lambda body) from the typed AST, one marker per region in a copy of the source, per-test hit sets from the baseline run. On a fixture with hand-written ground truth: 26 of 26 lines, 10 of 10 functions, 18 of 18 branches agree; three deliberately wrong variants each fail at the intended place. On flix-invaders (501 tests, 13.7k lines): all 501 tests pass instrumented as plain, the suite is 12 % slower in two clean rounds (5 % to 12 % by the minima). Known limits: lazy `and`/`or` operands and loop bodies are not regions (lines owned by the enclosing region read as hit).
+- Functional: regions (function entry, `if` branch, `match` arm, lambda body) from the typed AST, one marker per region in a copy of the source, per-test hit sets from the baseline run. On a fixture with hand-written ground truth: 26 of 26 lines, 10 of 10 functions, 18 of 18 branches agree; three deliberately wrong variants and a changed limits listing each fail at the intended place. On flix-invaders (501 tests, 13.7k lines): all 501 tests pass instrumented as plain, the suite is 12 % slower in two clean rounds (5 % to 12 % by the minima). Known limits: lazy `and`/`or` operands and loop bodies are not regions (lines owned by the enclosing region read as hit).
 - Markers survive the optimiser in the form `if (hit(n)) bug!(..) else { E }` (the result is used). In flix-invaders 1156 of 1256 markers are in the bytecode; 87 of the 100 missing are dead functions or inside one.
 - Datalog: rules and facts per test through the solver hook are reachable at three levels: presence (cheap, exact), relation sizes (cheap), and tuples first derived per rule through a second solve with provenance (exact on the fixture, but it does not terminate on cyclic programs: 12 of 23 tests in `Test.Exp.Fixpoint.Solve.Simple` hit the 8 s timeout). The hook has no source positions; the rule is mapped to its source line through the typed AST by predicate names, unique for 419 of 432 rule instances once the search is narrowed to the test's def (in the 10 Flix test files that have a solve of their own).
 - Formats: LCOV and Cobertura XML are generated and checked for record invariants and `coverage-04.dtd`; neither expresses a partly covered line; LCOV carries per-test records (`TN:`), 27.6 MB for 501 tests. The text report follows `Report.format`.
@@ -30,9 +30,9 @@ Can the marker approach of #18 be generalised to test coverage of functional Fli
 ```sh
 export SPIKE_WORK=<scratch dir>                                  # jars, classes, outputs
 sh spikes/coverage-generalisation/run.sh                         # fixture with ground truth, exit 1 on a deviation
-JAVA_OPTS="-Dcov.lambdas=false -Dcov.plain=false" sh spikes/coverage-generalisation/run.sh   # must fail: 1 line
-JAVA_OPTS="-Dcov.sabotage=outer -Dcov.plain=false" sh spikes/coverage-generalisation/run.sh  # must fail: 8 lines
-JAVA_OPTS="-Dcov.sabotage=nomarks -Dcov.plain=false" sh spikes/coverage-generalisation/run.sh # must fail: 41
+JAVA_OPTS="-Dcov.lambdas=false -Dcov.plain=false" sh spikes/coverage-generalisation/run.sh   # must fail: 1 deviation
+JAVA_OPTS="-Dcov.sabotage=outer -Dcov.plain=false" sh spikes/coverage-generalisation/run.sh  # must fail: 10
+JAVA_OPTS="-Dcov.sabotage=nomarks -Dcov.plain=false" sh spikes/coverage-generalisation/run.sh # must fail: 43
 python3 -I spikes/coverage-generalisation/check-formats.py $SPIKE_WORK/run-fixture <coverage-04.dtd>
 sh spikes/coverage-generalisation/run.sh <project dir>           # any project with src/ and test/ (flix-invaders)
 JAVA_OPTS="-Dcov.only=plain" REPS=15 sh .../run.sh spikes/coverage-generalisation/bench      # baseline, own JVM
@@ -79,8 +79,9 @@ Counter-probes (each run must fail at the intended cause; recorded runs):
 | Variant | Command (`JAVA_OPTS`) | Result |
 | --- | --- | --- |
 | no lambda regions | `-Dcov.lambdas=false` | `Grade.flix:25` expected P, got H (1 deviation): the lambda in `total(Nil)` never runs, its line reads as hit |
-| a line is owned by the outermost region | `-Dcov.sabotage=outer` | 8 line deviations (every line inside an unhit branch reads H); functions and branches unaffected |
-| markers never record | `-Dcov.sabotage=nomarks` | 41 deviations: 20 lines, 9 functions, 12 branches |
+| a line is owned by the outermost region | `-Dcov.sabotage=outer` | 10 deviations: 8 lines (every line inside an unhit branch reads H) and the 2 limit rows; functions and branches unaffected |
+| markers never record | `-Dcov.sabotage=nomarks` | 43 deviations: 20 lines, 9 functions, 12 branches, 2 limit rows |
+| a limits row changed (`Limits.flix:6` tool value M) | a copy of `fixture/` with that edit | 1 deviation: the tool still says H |
 | a Cobertura writer without `complexity` on `<method>` | (earlier version) | `check-formats.py`: 10 violations of `coverage-04.dtd`, 0 after the fix |
 
 Known limits (`fixture/src/Limits.flix`): `a and check(x)` with `a = false` and a `foreach` over `Nil`. The truth is P for both lines; the tool says H, because the right operand and the loop body are not regions. Both are listed in `expected-limits.tsv` with truth and tool value, and `run.sh` fails if the tool changes either way.
