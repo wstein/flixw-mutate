@@ -53,7 +53,10 @@ public final class SiteFinderTest {
             "24:58 DIVIDE 10 / n",
             "35:61 OR x < lo or x > hi",
             "35:61 LESS x < lo",
-            "35:71 GREATER x > hi"), describe(text, r.sites().get(calc.toString()))));
+            "35:71 GREATER x > hi",
+            "44:9 AND a and (if (n == 0) System.getProperty(\"\") == \"x\" else true)",
+            "44:20 EQUAL n == 0",
+            "44:28 EQUAL System.getProperty(\"\") == \"x\""), describe(text, r.sites().get(calc.toString()))));
 
         c.test("only the given file has sites", () -> eq(List.of(calc.toString()), List.copyOf(r.sites().keySet())));
 

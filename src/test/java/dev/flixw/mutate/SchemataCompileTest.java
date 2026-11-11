@@ -44,6 +44,12 @@ public final class SchemataCompileTest {
             for (FlixApi.TestCase t : api.tests((FlixApi.Program) r)) t.run().run();
         });
 
+        c.test("the right operand of and is evaluated only when needed (switch off)", () -> {
+            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
+            for (FlixApi.TestCase t : api.tests((FlixApi.Program) r))
+                if (t.name().endsWith("testGuarded")) t.run().run();
+        });
+
         c.test("a mutant number changes a result", () -> {
             Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
             List<FlixApi.TestCase> tests = api.tests((FlixApi.Program) r);
