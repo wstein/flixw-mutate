@@ -8,6 +8,13 @@ mod Cold {
     pub def top(xs: List[Int32]): Int32 =
         List.sum(List.map(x -> helper(x), xs))
 
+    // Two dropped defs that call each other: dead although each has a caller.
+    def ping(n: Int32): Int32 = if (n > 0) pong(n - 1) else 0
+
+    def pong(n: Int32): Int32 = if (n > 0) ping(n - 1) else 1
+
+    pub def start(n: Int32): Int32 = ping(n)
+
     def scale(n: Int32): Int32 = n * 3
 
     pub def knobs(): List[List[Int32 -> Int32]] =
