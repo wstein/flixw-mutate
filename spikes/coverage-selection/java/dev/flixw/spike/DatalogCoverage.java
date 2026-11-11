@@ -88,6 +88,25 @@ public final class DatalogCoverage {
         muts.add(new Mut("drop-rule", 99, 0));
         out.println("mutants: " + all.size() + " distinct (op, rule, atom), running " + (muts.size() - 1) + " by stride " + stride + " plus 1 probe (rule 99)");
 
+        // Over-selection: the boundary mutants just beyond what any solve has (the first missing rule, the first
+        // missing body atom of each rule) are reached by no test. A reach test that selects too much shows here.
+        int maxRules = 0;
+        TreeMap<Integer, Integer> maxAtoms = new TreeMap<>();
+        for (PerTest p : base) for (String kinds : p.kinds()) {
+            String[] rules = kinds.isEmpty() ? new String[0] : kinds.split(",", -1);
+            maxRules = Math.max(maxRules, rules.length);
+            for (int r = 0; r < rules.length; r++) maxAtoms.merge(r, rules[r].length(), Math::max);
+        }
+        List<Mut> beyond = new ArrayList<>();
+        beyond.add(new Mut("drop-rule", maxRules, 0));
+        for (Map.Entry<Integer, Integer> e : maxAtoms.entrySet()) {
+            beyond.add(new Mut("drop-atom", e.getKey(), e.getValue()));
+            beyond.add(new Mut("flip-negation", e.getKey(), e.getValue()));
+        }
+        int overSelected = 0;
+        for (Mut m : beyond) for (PerTest p : base) if (reaches(p, m)) { overSelected++; out.println("  OVER-SELECTED " + m + " by " + p.name()); }
+        out.println("over-selection: " + beyond.size() + " boundary mutants, selected (test, mutant) pairs: " + overSelected + " (must be 0)");
+
         // 3. Per mutant: tests that reach it, full run, selected run, compare.
         int equal = 0, differ = 0, probeLabel = 0;
         long fullNs = 0, selNs = 0, fullRuns = 0, selRuns = 0;
@@ -116,10 +135,12 @@ public final class DatalogCoverage {
             boolean same = kindOf(full).equals(kindOf(chosen)) && killer(full).equals(killer(chosen));
             kindCount.merge(full[0], 1, Integer::sum);
             if (same) equal++;
-            else if (m.rule() == 99) probeLabel++; // the probe: no solve has the rule, the label differs by design
+            // The probe: no solve has the rule; the full run compares models (equivalent), the selection runs nothing
+            // (survived). Any other deviation (killed, invalid, error) is a real difference.
+            else if (m.rule() == 99 && kindOf(full).equals("equivalent") && kindOf(chosen).equals("survived")) probeLabel++;
             else differ++;
             out.printf("  %-22s tests=%-2d full=%-10s selected=%-10s %s%n", m, sel.size(), kindOf(full), kindOf(chosen),
-                same ? "same" : m.rule() == 99 ? "label differs, no test reaches it (full: " + full[1] + ")" : "DIFF full[" + full[1] + "] selected[" + chosen[1] + "]");
+                same ? "same" : m.rule() == 99 && kindOf(full).equals("equivalent") && kindOf(chosen).equals("survived") ? "label differs, no test reaches it (full: " + full[1] + ")" : "DIFF full[" + full[1] + "] selected[" + chosen[1] + "]");
         }
         SolverHookRun.reset();
         int real = muts.size() - 1;
@@ -134,15 +155,16 @@ public final class DatalogCoverage {
         // and the distribution covers every mutant run.
         int histSum = hist.values().stream().mapToInt(x -> x).sum();
         int unreachedReal = hist.getOrDefault(0, 0);
-        boolean ok = differ == 0 && histSum == real && unreachedReal == 0;
+        boolean ok = differ == 0 && histSum == real && unreachedReal == 0 && overSelected == 0;
         out.println(ok ? "RESULT: OK" : "RESULT: FAIL " + differ + " different, distribution covers " + histSum + " of " + real
-            + ", unreached " + unreachedReal);
+            + ", unreached " + unreachedReal + ", over-selected pairs " + overSelected);
         System.exit(ok ? 0 : 1);
     }
 
     /** True if one solve of the test has the rule (and for an atom mutant the body atom). */
     static boolean reaches(PerTest p, Mut m) {
         if (System.getProperty("spike.sabotage", "").equals("nomarks")) return false;
+        if (System.getProperty("spike.sabotage", "").equals("reachall")) return true;
         for (String kinds : p.kinds()) {
             String[] rules = kinds.isEmpty() ? new String[0] : kinds.split(",", -1);
             if (m.rule() < rules.length && (m.op().equals("drop-rule") || m.atom() < rules[m.rule()].length())) return true;

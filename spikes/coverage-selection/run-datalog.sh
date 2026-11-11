@@ -2,7 +2,7 @@
 # Spike #16, part B: test selection for Datalog mutants with the solver hook (route b of spikes/solver-hook).
 # Usage: SPIKE_WORK=<scratch dir> sh spikes/coverage-selection/run-datalog.sh [fixture|material]
 # Environment: MAX (mutants per file, default 40), TIMEOUT_MS (per test, default 30000), JAVA_OPTS
-# (-Dspike.sabotage=nomarks: no test reaches any mutant, the run must fail)
+# (-Dspike.sabotage=nomarks: no test reaches any mutant; =reachall: every test reaches every mutant; the run must fail)
 set -eu
 umask 022
 here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
