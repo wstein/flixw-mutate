@@ -138,6 +138,15 @@ public final class Schemata {
         };
     }
 
+    /**
+     * The sites {@link #render} accepts: a site that overlaps another one without being inside one of
+     * its operands is left out (the outer site wins), so is a duplicate. The order of the result is the
+     * order of the rewrite (start ascending, longer first).
+     */
+    public static List<Site> usable(List<Site> sites) {
+        throw new UnsupportedOperationException("not implemented");
+    }
+
     /** 1-based line and column of an offset, as {@code line:col}. */
     public static String position(String source, int offset) {
         int line = 1;

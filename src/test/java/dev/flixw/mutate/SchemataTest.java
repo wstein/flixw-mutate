@@ -117,6 +117,32 @@ public final class SchemataTest {
             throwsA(IllegalArgumentException.class, () -> Schemata.render("x\n", List.of(bad), 1));
         });
 
+        c.test("usable keeps well-nested sites in rewrite order", () -> {
+            String src = "def f(x: Int32): Bool = x < 3 and x > 0\n";
+            Site a = infix(src, SiteKind.AND, "x < 3 and x > 0", "x < 3", "x > 0");
+            Site l = infix(src, SiteKind.LESS, "x < 3", "x", "3");
+            Site g = infix(src, SiteKind.GREATER, "x > 0", "x", "0");
+            eq(List.of(a, l, g), Schemata.usable(List.of(g, l, a)));
+        });
+
+        c.test("usable drops a partial overlap and a site in the operator text", () -> {
+            String src = "def f(x: Int32): Bool = x < 3 and x > 0\n";
+            Site a = infix(src, SiteKind.AND, "x < 3 and x > 0", "x < 3", "x > 0");
+            Site l = infix(src, SiteKind.LESS, "x < 3", "x", "3");
+            Span w = new Span(l.whole().start() + 2, l.whole().end() + 5);
+            Site partial = new Site("Calc.flix", SiteKind.AND, w, new Span(w.start(), w.start() + 1), new Span(w.end() - 1, w.end()));
+            Span inGap = at(src, "and");
+            Site inOperator = new Site("Calc.flix", SiteKind.NOT, inGap, inGap, null);
+            eq(List.of(a, l), Schemata.usable(List.of(partial, inOperator, l, a)));
+            Schemata.render(src, Schemata.usable(List.of(partial, inOperator, l, a)), 1);
+        });
+
+        c.test("usable drops a duplicate", () -> {
+            String src = "def f(x: Int32): Bool = x < 3\n";
+            Site l = infix(src, SiteKind.LESS, "x < 3", "x", "3");
+            eq(List.of(l), Schemata.usable(List.of(l, l)));
+        });
+
         c.test("position is 1-based line:col", () -> {
             String src = "ab\ncd\n";
             eq("1:1", Schemata.position(src, 0));
