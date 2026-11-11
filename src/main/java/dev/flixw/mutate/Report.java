@@ -2,8 +2,12 @@ package dev.flixw.mutate;
 
 import java.util.List;
 
-/** The result of a run: one {@link Result} per mutant and the numbers around it. */
-public record Report(List<Result> results, int skippedSites, int tests, long baselineMs, long timeoutMs) {
+/** The result of a run: one {@link Result} per mutant and the numbers around it; {@code coverage} is null if it was not recorded. */
+public record Report(List<Result> results, int skippedSites, int tests, long baselineMs, long timeoutMs, Coverage coverage) {
+    public Report(List<Result> results, int skippedSites, int tests, long baselineMs, long timeoutMs) {
+        this(results, skippedSites, tests, baselineMs, timeoutMs, null);
+    }
+
     public int count(Outcome outcome) {
         int n = 0;
         for (Result r : results) if (r.outcome() == outcome) n++;

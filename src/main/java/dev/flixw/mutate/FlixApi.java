@@ -35,13 +35,14 @@ final class FlixApi {
 
     // --- compiler entry points -------------------------------------------------------------------------------
 
-    private Object newFlix(List<Path> files) {
+    /** {@code jars}: Java libraries the program may call (generated code finds classes outside the JDK only there). */
+    private Object newFlix(List<Path> files, List<Path> jars) {
         try {
             Class<?> flixClass = cls("ca.uwaterloo.flix.api.Flix");
             Object packages = flixClass.getMethod("$lessinit$greater$default$1").invoke(null);
-            Object jars = module("scala.collection.immutable.Nil$");
+            Object jarList = call(callStatic("scala.jdk.javaapi.CollectionConverters", "asScala", "java.util.List", jars), "toList");
             Object mounts = flixClass.getMethod("$lessinit$greater$default$3").invoke(null);
-            Object flix = flixClass.getConstructors()[0].newInstance(packages, jars, mounts);
+            Object flix = flixClass.getConstructors()[0].newInstance(packages, jarList, mounts);
             call(flix, "setFormatter", module("ca.uwaterloo.flix.util.Formatter$NoFormatter$"));
             Object unrestricted = module("ca.uwaterloo.flix.language.ast.shared.SecurityContext$Unrestricted$");
             for (Path f : files) call(flix, "addFile", f, unrestricted);
@@ -53,7 +54,7 @@ final class FlixApi {
 
     /** Type-checks the files (the standard library is included by the compiler). */
     Checked check(List<Path> files) {
-        Object flix = newFlix(files);
+        Object flix = newFlix(files, List.of());
         Object result = call(flix, "check");
         Object root = optionGet(call(result, "_1"));
         List<String> messages = messages(call(result, "_2"));
@@ -64,8 +65,11 @@ final class FlixApi {
     record Program(Object loaded) {}
 
     /** Compiles and loads the files; the result is a {@link Program} or the errors. */
-    Object compileAndLoad(List<Path> files) {
-        Object flix = newFlix(files);
+    Object compileAndLoad(List<Path> files) { return compileAndLoad(files, List.of()); }
+
+    /** Compiles and loads the files with the Java libraries {@code jars}. */
+    Object compileAndLoad(List<Path> files, List<Path> jars) {
+        Object flix = newFlix(files, jars);
         Object result = call(flix, "compile");
         String kind = result.getClass().getSimpleName();
         if (kind.equals("Ok")) {

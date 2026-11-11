@@ -25,9 +25,14 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <ul>
  * <li>{@code sites <listfile>}: type-checks the files of the list and answers one {@code site} message per
  *   site and {@code done <left out>}; {@code compile-error <message>...} if the program does not compile.
- * <li>{@code load <listfile>}: compiles and loads the program; {@code loaded <tests>} or {@code compile-error}.
- * <li>{@code run <n>}: sets the switch to mutant {@code n} (0: none), runs the tests in name order and stops
- *   at the first failure: {@code result survived} or {@code result killed <test> <description>}.
+ * <li>{@code load <listfile> <mutants> <markerjar>}: compiles and loads the program with the marker jar
+ *   (written there if it does not exist; the switches are 1 to {@code mutants}); {@code loaded <tests>} or
+ *   {@code compile-error}.
+ * <li>{@code run <n> [<test>...]}: sets the switch to mutant {@code n} (0: none), runs the named tests in the
+ *   given order (all tests in name order without names) and stops at the first failure:
+ *   {@code result survived} or {@code result killed <test> <description>}.
+ * <li>{@code baseline [<test>...]}: runs like {@code run 0} with the markers recording: one
+ *   {@code covered <test> <switch>...} message per test, then the result.
  * </ul>
  * A list file has one line per file: {@code M<TAB>path} for a file whose sites are wanted, {@code F<TAB>path}
  * for a file that is only compiled.
@@ -71,8 +76,9 @@ public final class Worker {
     private void handle(Protocol.Message m) throws IOException {
         switch (m.verb()) {
             case "sites" -> sites(readList(Path.of(m.field(0))));
-            case "load" -> load(readList(Path.of(m.field(0))));
-            case "run" -> run(Integer.parseInt(m.field(0)));
+            case "load" -> load(readList(Path.of(m.field(0))), Integer.parseInt(m.field(1)), Path.of(m.field(2)));
+            case "run" -> run(Integer.parseInt(m.field(0)), m.fields().subList(1, m.fields().size()));
+            case "baseline" -> baseline(m.fields());
             default -> out.println(Protocol.encode("error", "unknown request " + m.verb()));
         }
     }
@@ -102,8 +108,11 @@ public final class Worker {
         out.println(Protocol.encode("done", String.valueOf(r.skipped())));
     }
 
-    private void load(Map<Path, Boolean> files) {
-        Object r = api.compileAndLoad(new ArrayList<>(files.keySet()));
+    private void load(Map<Path, Boolean> files, int mutants, Path markerJar) throws IOException {
+        if (!Files.exists(markerJar)) MarkerJar.write(markerJar);
+        MarkerState.publish(mutants);
+        MarkerState.set(0, false);
+        Object r = api.compileAndLoad(new ArrayList<>(files.keySet()), List.of(markerJar));
         if (r instanceof FlixApi.Failure f) {
             compileError(f);
             return;
@@ -116,21 +125,58 @@ public final class Worker {
         out.println(Protocol.encode("compile-error", failure.messages().toArray(new String[0])));
     }
 
-    private void run(int mutant) {
-        System.setProperty("flixw.mutant", String.valueOf(mutant));
-        try {
-            for (FlixApi.TestCase t : tests) {
-                try {
-                    t.run().run();
-                } catch (RuntimeException | Error e) {
-                    out.println(Protocol.encode("result", "killed", t.name(), describe(e)));
-                    return;
-                }
-            }
-            out.println(Protocol.encode("result", "survived"));
-        } finally {
-            System.setProperty("flixw.mutant", "0");
+    /** The tests to run: the named ones in the given order, or all in name order. */
+    private List<FlixApi.TestCase> select(List<String> names) {
+        if (names.isEmpty()) return tests;
+        Map<String, FlixApi.TestCase> byName = new java.util.HashMap<>();
+        for (FlixApi.TestCase t : tests) byName.put(t.name(), t);
+        List<FlixApi.TestCase> selected = new ArrayList<>();
+        for (String n : names) {
+            FlixApi.TestCase t = byName.get(n);
+            if (t == null) throw new IllegalArgumentException("unknown test " + n);
+            selected.add(t);
         }
+        return selected;
+    }
+
+    private void run(int mutant, List<String> names) {
+        List<FlixApi.TestCase> selected = select(names);
+        MarkerState.set(mutant, false);
+        try {
+            runAll(selected, false);
+        } finally {
+            MarkerState.set(0, false);
+        }
+    }
+
+    private void baseline(List<String> names) {
+        List<FlixApi.TestCase> selected = select(names);
+        MarkerState.set(0, true);
+        try {
+            runAll(selected, true);
+        } finally {
+            MarkerState.set(0, false);
+        }
+    }
+
+    private void runAll(List<FlixApi.TestCase> selected, boolean record) {
+        for (FlixApi.TestCase t : selected) {
+            if (record) MarkerState.clear();
+            try {
+                t.run().run();
+            } catch (RuntimeException | Error e) {
+                out.println(Protocol.encode("result", "killed", t.name(), describe(e)));
+                return;
+            }
+            if (record) {
+                String[] fields = new String[MarkerState.hit().size() + 1];
+                fields[0] = t.name();
+                int i = 1;
+                for (int id : MarkerState.hit()) fields[i++] = String.valueOf(id);
+                out.println(Protocol.encode("covered", fields));
+            }
+        }
+        out.println(Protocol.encode("result", "survived"));
     }
 
     /** One line for a failure: class and first message line without terminal colour codes, at most 160 chars. */
