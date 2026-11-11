@@ -1,6 +1,6 @@
 # Spike: marker coverage generalised to test coverage (functional Flix and Datalog)
 
-For [#22](https://github.com/wstein/flixw-mutate/issues/22), refs [#18](https://github.com/wstein/flixw-mutate/issues/18). Stacked on PR #20 (`feat/engine-coverage-selection-2`, head `438e66d53be9be58b62d10dc5259b246ed79fff5`); #19 and #20 are not merged and not independently reviewed. The engine (`src/main`) is unchanged: `FlixApi` and `SiteFinder.offset` are compiled as they are. Spikes before it: [`../coverage-selection/`](../coverage-selection/README.md) (markers, selection), [`../solver-hook/`](../solver-hook/README.md) (Datalog hook, route b).
+For [#22](https://github.com/wstein/flixw-mutate/issues/22), refs [#18](https://github.com/wstein/flixw-mutate/issues/18). Written on the head of PR #20 (`438e66d53be9be58b62d10dc5259b246ed79fff5`) and rebased onto `main` (`62671fea74daebb2ca5b2c3146d054c77faa1386`) after #19 and #20 were merged; `git range-diff` shows the six patches unchanged. The fixture runs, the Datalog fixture run and the flix-invaders counts were repeated on the rebased head; the timing tables are from the earlier head. The engine (`src/main`) is unchanged: `FlixApi` and `SiteFinder.offset` are compiled as they are. Spikes before it: [`../coverage-selection/`](../coverage-selection/README.md) (markers, selection), [`../solver-hook/`](../solver-hook/README.md) (Datalog hook, route b).
 
 ## Question
 
