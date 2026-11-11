@@ -15,15 +15,16 @@ import org.objectweb.asm.Opcodes;
 /**
  * Audit of the coverage markers in the compiled bytecode (flixw-mutate#29). A marker that is inserted into the source but
  * absent from the bytecode can only read "not hit"; in a live function that would be a false "not covered". Every
- * missing marker gets one class: {@code DEAD_ENTRY} (the entry marker of a function the compiler dropped), {@code IN_DEAD}
- * (any other marker of such a function) or {@code LIVE} (the function is in the bytecode, or it was dropped but a live
- * function applies it, so its body may be inlined). A function is dropped when no class of the bytecode carries its name
- * ({@code Def$name}, {@code Clo$name$id}); it is dead when, in addition, every caller in the checked files is dropped
- * and dead too. A name followed by {@code $digits} may be a lifted lambda of another def or an overload: the audit errs towards
- * {@code LIVE}. Every {@code LIVE} row fails the audit.
+ * missing marker gets one class: {@code DEAD_ENTRY} (the entry marker of a dead function), {@code IN_DEAD} (any other marker
+ * of one), {@code ALLOWED} (a {@code LIVE} marker that the project's allow list names, with a reason) or {@code LIVE}.
+ * A def is dropped when no class of the bytecode carries its namespace and name ({@code Def$name}, {@code Def$name$id},
+ * {@code Clo$name$id}). A def is live when it is in the bytecode, is in a test file, or is reached through the call graph
+ * (applications of defs, {@code ApplyDef}, in the checked and test files) from a def that is; a dropped def that is live
+ * was inlined, so its body is in a caller. Every other def is dead. A name followed by {@code $digits} may be a lifted lambda
+ * or an overload and counts as present: the audit errs towards {@code LIVE}. Every {@code LIVE} row fails the audit.
  */
 final class MarkerAudit {
-    enum Class { DEAD_ENTRY, IN_DEAD, LIVE }
+    enum Class { DEAD_ENTRY, IN_DEAD, ALLOWED, LIVE }
 
     record Row(CovSites.Region region, Class cls, String function, String cause) {}
 
@@ -35,22 +36,49 @@ final class MarkerAudit {
     final int unknown;
     private final Set<String> classNames;
     private final CovSites sites;
-    private final Map<String, Boolean> deadMemo = new java.util.HashMap<>();
+    private final Set<String> live = new TreeSet<>();
 
-    MarkerAudit(Map<Integer, Integer> found, Set<String> classNames, CovSites sites) {
+    /** {@code rel}: source name to project-relative path. {@code allow}: "file|KIND|line" of a LIVE marker to the reason it is accepted (see {@link #readAllow}). */
+    MarkerAudit(Map<Integer, Integer> found, Set<String> classNames, CovSites sites, Map<String, String> allow, Map<String, String> rel) {
         this.found = new TreeMap<>(found);
         this.classNames = classNames;
         this.sites = sites;
         this.inserted = sites.regions.size();
+        java.util.ArrayDeque<String> work = new java.util.ArrayDeque<>();
+        for (String d : sites.defs) if (present(d) && live.add(d)) work.add(d);
+        for (String d : sites.roots) if (live.add(d)) work.add(d);
+        while (!work.isEmpty())
+            for (String callee : sites.calls.getOrDefault(work.poll(), Set.of())) if (live.add(callee)) work.add(callee);
         for (CovSites.Region r : sites.regions) {
             if (found.containsKey(r.id())) continue;
-            boolean dead = r.owner().isEmpty() ? false : dead(r.owner(), new TreeSet<>());
+            boolean dead = !r.owner().isEmpty() && !live.contains(r.owner());
             Class cls = !dead ? Class.LIVE : r.kind() == CovSites.Kind.ENTRY ? Class.DEAD_ENTRY : Class.IN_DEAD;
-            missing.add(new Row(r, cls, r.owner(), cause(r.owner(), dead)));
+            String cause = cause(r.owner(), dead);
+            String reason = allow.get(rel.getOrDefault(r.file(), r.file()) + "|" + r.kind() + "|" + r.line());
+            if (cls == Class.LIVE && reason != null) { cls = Class.ALLOWED; cause = "allowed: " + reason; }
+            missing.add(new Row(r, cls, r.owner().replaceAll("\\$\\d+$", ""), cause));
         }
         int u = 0;
         for (int id : found.keySet()) if (id < 1 || id > sites.regions.size()) u++;
         unknown = u;
+    }
+
+    /** The allow list of a project: TSV with the header {@code file kind line reason}; every row needs a reason. */
+    static Map<String, String> readAllow(java.nio.file.Path f) {
+        Map<String, String> m = new java.util.HashMap<>();
+        if (!java.nio.file.Files.isRegularFile(f)) return m;
+        try {
+            List<String> ls = java.nio.file.Files.readAllLines(f);
+            for (int i = 1; i < ls.size(); i++) {
+                if (ls.get(i).isBlank()) continue;
+                String[] c = ls.get(i).split("\t", -1);
+                if (c.length != 4 || c[3].isBlank()) throw new IllegalArgumentException(f + ":" + (i + 1) + ": expected file, kind, line and a reason");
+                m.put(c[0] + "|" + c[1] + "|" + c[2], c[3]);
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return m;
     }
 
     /** The namespace and the name of a def as the class names carry them; an instance def loses its numeric suffix. */
@@ -71,26 +99,14 @@ final class MarkerAudit {
         return false;
     }
 
-    /** A def is dead if it is dropped and no caller of the checked files is live. A def with no caller at all is dead. */
-    private boolean dead(String sym, Set<String> path) {
-        Boolean m = deadMemo.get(sym);
-        if (m != null) return m;
-        if (present(sym)) return false;
-        if (!path.add(sym)) return true; // a cycle of dropped defs
-        boolean dead = true;
-        for (var e : sites.calls.entrySet()) if (e.getValue().contains(sym) && !dead(e.getKey(), path)) { dead = false; break; }
-        path.remove(sym);
-        deadMemo.put(sym, dead);
-        return dead;
-    }
-
     private String cause(String owner, boolean dead) {
         if (owner.isEmpty()) return "no owner def";
         if (present(owner)) return "function is in the bytecode";
         List<String> callers = new ArrayList<>();
-        for (var e : sites.calls.entrySet()) if (e.getValue().contains(owner)) callers.add(e.getKey());
-        if (dead) return "no class Def$" + split(owner)[1] + "; " + (callers.isEmpty() ? "no caller" : "callers all dropped: " + String.join(", ", callers));
-        return "no class Def$" + split(owner)[1] + " but a live caller applies it (inlined?): " + String.join(", ", callers);
+        for (var e : sites.calls.entrySet()) if (e.getValue().contains(owner) && (live.contains(e.getKey()) == !dead)) callers.add(e.getKey().replaceAll("\\$\\d+$", ""));
+        String cls = "no class Def$" + split(owner)[1];
+        if (dead) return cls + "; " + (callers.isEmpty() ? "no caller" : "callers all dead: " + String.join(", ", callers));
+        return cls + " but applied by live code (inlined?): " + String.join(", ", callers);
     }
 
     /** Live functions with a missing marker: the audit fails on these. */
@@ -105,7 +121,7 @@ final class MarkerAudit {
         for (Row m : missing) byKind.merge(m.region().kind().name(), 1, Integer::sum);
         return "marker audit (bytecode): inserted " + inserted + ", distinct ids found " + found.size() + ", call sites " + sitesTotal
             + ", ids at more than one call site " + dup + " (at most " + most + ")" + ", missing " + missing.size() + " " + byKind
-            + ": dead entry " + count(Class.DEAD_ENTRY) + ", inside a dead function " + count(Class.IN_DEAD) + ", LIVE function " + count(Class.LIVE)
+            + ": dead entry " + count(Class.DEAD_ENTRY) + ", inside a dead function " + count(Class.IN_DEAD) + ", allowed " + count(Class.ALLOWED) + ", LIVE function " + count(Class.LIVE)
             + ", ids not inserted " + unknown;
     }
 
@@ -121,14 +137,14 @@ final class MarkerAudit {
     }
 
     /** Scans the classes of the compiled program for {@code CovMark.hit(<int constant>)} calls. */
-    static MarkerAudit scan(CompilationResult cr, CovSites sites) {
+    static MarkerAudit scan(CompilationResult cr, CovSites sites, Map<String, String> allow, Map<String, String> rel) {
         TreeMap<Integer, Integer> found = new TreeMap<>();
         Set<String> names = new TreeSet<>();
         scala.jdk.javaapi.CollectionConverters.asJava(cr.root().classes()).forEach((cd, jc) -> {
             names.add(cd.packageName() + "|" + cd.displayName());
             scanClass(jc.bytecode(), found);
         });
-        return new MarkerAudit(found, names, sites);
+        return new MarkerAudit(found, names, sites, allow, rel);
     }
 
     /** The ids of the marker calls in one class file, with the number of call sites. */

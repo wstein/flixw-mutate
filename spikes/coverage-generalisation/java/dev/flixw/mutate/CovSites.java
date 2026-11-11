@@ -32,6 +32,9 @@ final class CovSites {
     final java.util.Set<String> defs = new java.util.TreeSet<>();
     /** Call graph of the checked files: def symbol to the def symbols it applies. */
     final Map<String, java.util.Set<String>> calls = new java.util.TreeMap<>();
+    /** Symbols of the defs in the test files: they are entry points of the program, whatever the call graph says. */
+    final java.util.Set<String> roots = new java.util.TreeSet<>();
+    private final java.util.Set<String> testFiles;
     private String owner = "";
 
     private final FlixApi api;
@@ -43,7 +46,8 @@ final class CovSites {
     int skipped;
     private static final boolean DEBUG = Boolean.getBoolean("cov.debug");
 
-    private CovSites(FlixApi api, Map<String, String> files, boolean lambdas) {
+    private CovSites(FlixApi api, Map<String, String> files, boolean lambdas, java.util.Set<String> testFiles) {
+        this.testFiles = testFiles;
         this.api = api;
         this.files = files;
         this.lambdas = lambdas;
@@ -51,7 +55,12 @@ final class CovSites {
 
     /** {@code files}: source name as the compiler reports it, mapped to the text; {@code lambdas}: region for lambda bodies. */
     static CovSites find(FlixApi api, Object root, Map<String, String> files, boolean lambdas) {
-        CovSites s = new CovSites(api, files, lambdas);
+        return find(api, root, files, lambdas, java.util.Set.of());
+    }
+
+    /** {@code testFiles}: source names of the test files; their defs are roots of the call graph and get no regions. */
+    static CovSites find(FlixApi api, Object root, Map<String, String> files, boolean lambdas, java.util.Set<String> testFiles) {
+        CovSites s = new CovSites(api, files, lambdas, testFiles);
         s.visit(root, null);
         s.renumber();
         return s;
@@ -146,9 +155,10 @@ final class CovSites {
                 file = f;
             } else {
                 file = null;
-                owner = "";
+                owner = real(loc) && testFiles.contains(String.valueOf(FlixApi.call(FlixApi.call(loc, "source"), "sourceName"))) ? String.valueOf(FlixApi.call(node, "sym")) : "";
+                if (!owner.isEmpty()) roots.add(owner);
             }
-        } else if (file != null && name.equals("TypedAst$Expr$ApplyDef") && !owner.isEmpty()) {
+        } else if (name.equals("TypedAst$Expr$ApplyDef") && !owner.isEmpty()) {
             calls.computeIfAbsent(owner, k -> new java.util.TreeSet<>()).add(String.valueOf(FlixApi.call(FlixApi.call(node, "symUse"), "sym")));
         }
         if (file != null && name.startsWith("TypedAst$Expr$")) {

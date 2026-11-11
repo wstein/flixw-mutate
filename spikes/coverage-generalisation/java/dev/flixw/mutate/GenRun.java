@@ -81,7 +81,7 @@ public final class GenRun {
         if (checked.failure() != null) throw new IllegalStateException(String.join("\n", checked.failure().messages()));
         long tCheck = ms(t0);
         t0 = System.nanoTime();
-        CovSites sites = CovSites.find(api, checked.root(), texts, lambdas);
+        CovSites sites = CovSites.find(api, checked.root(), texts, lambdas, tests.stream().map(Path::toString).collect(java.util.stream.Collectors.toSet()));
         long tFind = ms(t0);
         p("sites: " + sites.regions.size() + " regions (" + count(sites, CovSites.Kind.ENTRY) + " entry, " + count(sites, CovSites.Kind.THEN)
             + " then, " + count(sites, CovSites.Kind.ELSE) + " else, " + count(sites, CovSites.Kind.ARM) + " arm, " + count(sites, CovSites.Kind.LAMBDA)
@@ -131,7 +131,7 @@ public final class GenRun {
         long tLoad = ms(t0);
         p("render " + tRender + " ms; instrumented compile " + tCompile + " ms, load " + tLoad + " ms");
         if (!nop && sabotage.isEmpty()) {
-            MarkerAudit audit = MarkerAudit.scan(cr, sites);
+            MarkerAudit audit = MarkerAudit.scan(cr, sites, MarkerAudit.readAllow(project.resolve("marker-audit-allow.tsv")), rel);
             p(audit.summary());
             Files.writeString(work.resolve("marker-audit.tsv"), audit.tsv(rel));
             if (!audit.unexplained().isEmpty()) {
