@@ -24,7 +24,8 @@ import java.util.stream.Stream;
  * compiled once per variant and every test is run one by one.
  *
  * <p>Usage: CoverageRun &lt;projectDir&gt; &lt;workDir&gt; &lt;support.jar&gt; &lt;timeoutMs&gt; &lt;reps&gt;
- * Properties: spike.sabotage=nomarks (markers never record: the check must fail).
+ * Properties: spike.sabotage=nomarks (markers never record), noreset (the marker state is not cleared before each test),
+ * countall (every survivor counts as "without a run"); each makes the run fail.
  */
 public final class CoverageRun {
     /** The report channel; the tests print their assertion messages to stdout, which goes to stderr here. */
@@ -43,6 +44,9 @@ public final class CoverageRun {
         long timeout = Long.parseLong(a[3]);
         int reps = Integer.parseInt(a[4]);
         boolean sabotage = "nomarks".equals(System.getProperty("spike.sabotage"));
+        boolean noreset = "noreset".equals(System.getProperty("spike.sabotage"));
+        boolean countall = "countall".equals(System.getProperty("spike.sabotage"));
+        List<String> failures = new ArrayList<>();
         Files.createDirectories(work);
         CovState.publish();
         List<Path> src = flix(project.resolve("src"));
@@ -128,7 +132,7 @@ public final class CoverageRun {
         Map<String, TreeSet<Integer>> hitsRec = new TreeMap<>();
         Map<String, Integer> calls = new TreeMap<>();
         for (String n : names) {
-            CovState.clear();
+            if (!noreset) CovState.clear();
             CovState.STATE[2] = 0;
             programs.get("rec").get(n).run();
             calls.put(n, CovState.STATE[2]);
@@ -149,7 +153,7 @@ public final class CoverageRun {
         for (boolean h : CovState.HIT) if (h) atLoad++;
         Map<String, TreeSet<Integer>> hitsRev = new TreeMap<>();
         for (String n : new ArrayList<>(names).reversed()) {
-            CovState.clear();
+            if (!noreset) CovState.clear();
             fresh.get(n).run();
             TreeSet<Integer> s = new TreeSet<>();
             for (int i = 0; i < CovState.HIT.length; i++) if (CovState.HIT[i]) s.add(i);
@@ -158,7 +162,7 @@ public final class CoverageRun {
         CovState.STATE[1] = 0;
         OUT.println("-- fresh load, reverse order: sites evaluated while compiling and loading: " + atLoad
             + "; hit sets equal to the first pass for every test: " + hitsRev.equals(hitsRec));
-        if (!hitsRev.equals(hitsRec) && !sabotage) OUT.println("   DIFF forward vs reverse");
+        if (!hitsRev.equals(hitsRec)) { OUT.println("   DIFF forward vs reverse"); failures.add("reverse order"); }
         Map<String, TreeSet<Integer>> hitsProp = new TreeMap<>();
         for (String n : names) {
             clearHitProps();
@@ -170,7 +174,7 @@ public final class CoverageRun {
         }
         clearHitProps();
         OUT.println("-- hit sets: rec (Java static) equals proprec (System properties) for every test: " + hitsRec.equals(hitsProp));
-        if (!hitsRec.equals(hitsProp) && !sabotage) OUT.println("   DIFF rec vs proprec");
+        if (!hitsRec.equals(hitsProp)) { OUT.println("   DIFF rec vs proprec"); failures.add("rec vs proprec"); }
 
         // 5. Tests per switch id, and per site.
         Map<Integer, List<String>> byId = new TreeMap<>();
@@ -223,7 +227,7 @@ public final class CoverageRun {
             fullAll += fullMs; selAll += selMs;
             if (!full.kind().equals("timeout")) { fullNT += fullMs; selNT += selMs; }
             switch (full.kind()) {
-                case "survived" -> { surv++; fullSurv += fullMs; selSurv += selMs; fullSurvRuns += e1 - e0; selSurvRuns += e2 - e1; if (sel.isEmpty()) survNoRun++; }
+                case "survived" -> { surv++; fullSurv += fullMs; selSurv += selMs; fullSurvRuns += e1 - e0; selSurvRuns += e2 - e1; if (sel.isEmpty() || countall) survNoRun++; }
                 case "killed" -> killed++;
                 default -> timeouts++;
             }
@@ -241,8 +245,17 @@ public final class CoverageRun {
         OUT.printf("   run time over all mutants: full %d ms, selected %d ms; survivors only: full %d ms, selected %d ms%n", fullAll, selAll, fullSurv, selSurv);
         OUT.printf("   run time without the timeout mutants: full %d ms, selected %d ms%n", fullNT, selNT);
         OUT.printf("   test executions over all mutants: full %d, selected %d; survivors only: full %d, selected %d%n", fullRuns, selRuns, fullSurvRuns, selSurvRuns);
-        OUT.println(differ == 0 && missed == 0 ? "RESULT: OK" : "RESULT: FAIL " + differ + " different, " + missed + " missed");
-        System.exit(differ == 0 && missed == 0 ? 0 : 1);
+        // Consistency of the numbers reported above.
+        int histSum = counts.size();
+        long hitSum = 0;
+        for (int c : counts) hitSum += c;
+        long perTest = hitsRec.values().stream().mapToLong(x -> x.stream().filter(byId::containsKey).count()).sum();
+        if (histSum != mutants.size()) failures.add("distribution covers " + histSum + " of " + mutants.size() + " mutants");
+        if (hitSum != perTest) failures.add("tests per mutant sum " + hitSum + " differs from the hits per test " + perTest);
+        if (survNoRun != unreached) failures.add("survived without a run " + survNoRun + " differs from mutants reached by no test " + unreached);
+        boolean ok = differ == 0 && missed == 0 && failures.isEmpty();
+        OUT.println(ok ? "RESULT: OK" : "RESULT: FAIL " + differ + " different, " + missed + " missed" + (failures.isEmpty() ? "" : ", checks: " + failures));
+        System.exit(ok ? 0 : 1);
     }
 
     /** Runs the tests in order on a worker thread with a timeout; the switch is set for the call. */
