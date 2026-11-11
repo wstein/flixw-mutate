@@ -74,6 +74,25 @@ public final class EngineTest {
             eq(0, r.skippedSites());
         });
 
+        c.test("the baseline records which test reaches which mutant (calc: 33 mutants have one test, the lazy operand none)", () -> {
+            Report r = Engine.run(config(calc, null));
+            Coverage cov = r.coverage();
+            eq(11, cov.tests().size());
+            int none = 0;
+            int one = 0;
+            for (Result x : r.results()) {
+                int n = cov.testsFor(x.mutant().id()).size();
+                if (n == 0) none++;
+                else if (n == 1) one++;
+            }
+            eq(1, none);
+            eq(33, one);
+            eq(List.of(), cov.testsFor(34));
+            eq(List.of("TestCalc.testGuarded"), cov.testsFor(33));
+            eq(List.of("TestCalc.testSumTo"), cov.testsFor(r.results().stream()
+                .filter(x -> x.file().equals("src/Calc.flix") && x.position().equals("7:28")).findFirst().orElseThrow().mutant().id()));
+        });
+
         c.test("the skipped test of the fixture is not counted or run", () -> eq(11, Engine.run(config(calc, null)).tests()));
 
         c.test("a candidate whose text has a comment in the operator gap is left out and counted", () -> {

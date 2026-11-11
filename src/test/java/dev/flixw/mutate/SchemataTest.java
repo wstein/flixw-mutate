@@ -159,7 +159,9 @@ public final class SchemataTest {
             String m = Schemata.module();
             yes(m.contains("mod FlixwMutant {"), "module header");
             yes(m.contains("unsafe IO"), "unsafe IO wrapper");
-            yes(m.contains("\"flixw.mutant\""), "switch property");
+            yes(m.contains("import dev.flixw.mutate.Marker"), "marker import");
+            yes(m.contains("pub def on(n: Int32): Bool = unsafe IO { Marker.on(n) }"), "switch through the marker");
+            yes(!m.contains("flixw.mutant") && !m.contains("getProperty"), "no property parse per evaluation");
             for (SiteKind k : SiteKind.values()) {
                 String two = k.mutations().size() == 2 ? "n1: Int32, n2: Int32" : "n1: Int32";
                 yes(m.contains("pub def " + k.helper() + "(" + two), "helper " + k.helper() + " with " + two);

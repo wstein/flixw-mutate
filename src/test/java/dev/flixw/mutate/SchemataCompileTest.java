@@ -23,6 +23,12 @@ public final class SchemataCompileTest {
         Path module = work.resolve("FlixwMutant.flix");
         Files.writeString(module, Schemata.module());
         FlixApi api = new FlixApi(SchemataCompileTest.class.getClassLoader());
+        Path markerJar = work.resolve("marker.jar");
+        MarkerJar.write(markerJar);
+        List<Path> jars = List.of(markerJar);
+        int mutants = rendered.mutants().size();
+        MarkerState.publish(mutants);
+        MarkerState.set(0, false);
 
         c.test("the original program compiles and its tests pass", () -> {
             Object r = api.compileAndLoad(List.of(calc, testFile));
@@ -32,20 +38,19 @@ public final class SchemataCompileTest {
             for (FlixApi.TestCase t : tests) if (!t.skip()) t.run().run();
         });
 
-        System.clearProperty("flixw.mutant");
         c.test("the schemata program compiles; every mutant has a number", () -> {
-            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
+            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile), jars);
             yes(r instanceof FlixApi.Program, "compile failed: " + r);
             eq(rendered.mutants().size(), rendered.mutants().get(rendered.mutants().size() - 1).id());
         });
 
         c.test("with the switch off the tests pass", () -> {
-            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
+            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile), jars);
             for (FlixApi.TestCase t : api.tests((FlixApi.Program) r)) if (!t.skip()) t.run().run();
         });
 
         c.test("the right operand of and is evaluated only when needed (switch off)", () -> {
-            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
+            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile), jars);
             List<FlixApi.TestCase> guarded = api.tests((FlixApi.Program) r).stream()
                 .filter(t -> t.name().endsWith("testGuarded")).toList();
             eq(1, guarded.size());
@@ -53,11 +58,11 @@ public final class SchemataCompileTest {
         });
 
         c.test("a mutant number changes a result", () -> {
-            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile));
+            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile), jars);
             List<FlixApi.TestCase> tests = api.tests((FlixApi.Program) r);
             Mutant sub = rendered.mutants().stream()
                 .filter(m -> m.site().kind() == SiteKind.ADD && m.to().equals("-")).findFirst().orElseThrow();
-            System.setProperty("flixw.mutant", String.valueOf(sub.id()));
+            MarkerState.set(sub.id(), false);
             try {
                 boolean failed = false;
                 for (FlixApi.TestCase t : tests) {
@@ -70,8 +75,32 @@ public final class SchemataCompileTest {
                 }
                 yes(failed, "no test failed with mutant " + sub.id());
             } finally {
-                System.clearProperty("flixw.mutant");
+                MarkerState.set(0, false);
             }
+        });
+
+        c.test("a recording run names the switches each test evaluates", () -> {
+            Object r = api.compileAndLoad(List.of(renderedCalc, module, testFile), jars);
+            java.util.Map<String, List<Integer>> hits = new java.util.TreeMap<>();
+            MarkerState.set(0, true);
+            try {
+                for (FlixApi.TestCase t : api.tests((FlixApi.Program) r)) {
+                    if (t.skip()) continue;
+                    MarkerState.clear();
+                    t.run().run();
+                    hits.put(t.name(), MarkerState.hit());
+                }
+            } finally {
+                MarkerState.set(0, false);
+            }
+            eq(11, hits.size());
+            yes(!hits.get("TestCalc.testSumTo").isEmpty(), "no switch recorded for testSumTo");
+            eq(List.of(), hits.get("TestCalc.testPaths"));
+            java.util.Set<Integer> union = new java.util.TreeSet<>();
+            hits.values().forEach(union::addAll);
+            // All mutants but the one of the lazy operand that no test evaluates (testGuarded passes n != 0).
+            eq(mutants - 1, union.size());
+            yes(hits.get("TestCalc.testSumTo").size() < union.size(), "testSumTo must not reach everything");
         });
 
         c.test("a compile error is reported as messages", () -> {

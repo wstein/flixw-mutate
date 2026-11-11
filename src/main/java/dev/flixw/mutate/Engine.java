@@ -8,7 +8,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -115,6 +118,8 @@ public final class Engine {
         final Path work;
         WorkerClient worker;
         Path loadList;
+        Path markerJar;
+        int mutantCount;
 
         Run(Config config, Path root, List<Path> src, List<Path> tests, Path work) {
             this.config = config;
@@ -177,18 +182,29 @@ public final class Engine {
                 Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8);
                 loadLines.add("F\t" + module);
                 for (Path p : tests) loadLines.add("F\t" + p);
+                markerJar = work.resolve("marker.jar");
+                mutantCount = mutants.size();
                 loadList = work.resolve("load.list");
                 Files.write(loadList, loadLines, StandardCharsets.UTF_8);
 
-                // 3. One compile and load; the same switch module answers for the original (switch 0).
+                // 3. One compile and load; the same switch module answers for the original (switch 0). The
+                // baseline run has every switch off and records which test evaluates which site.
                 int testCount = load();
                 if (testCount == 0) throw new Failure("no tests: the project has no @Test functions that are not skipped");
                 long t0 = System.nanoTime();
-                Protocol.Message base = ask(Protocol.encode("run", "0"), RUN_END, SETUP_TIMEOUT_MS).get(0);
+                List<Protocol.Message> baseReply = ask(Protocol.encode("baseline"), RUN_END, SETUP_TIMEOUT_MS);
                 long baselineMs = (System.nanoTime() - t0) / 1_000_000;
+                Protocol.Message base = baseReply.get(baseReply.size() - 1);
                 if (!base.verb().equals("result")) throw failed("the baseline run failed", base);
                 if (base.field(0).equals("killed"))
                     throw new Failure("tests fail without a mutation: " + base.field(1) + ": " + base.field(2));
+                SortedMap<String, SortedSet<Integer>> hits = new TreeMap<>();
+                for (Protocol.Message m : baseReply.subList(0, baseReply.size() - 1)) {
+                    SortedSet<Integer> ids = new TreeSet<>();
+                    for (String id : m.fields().subList(1, m.fields().size())) ids.add(Integer.valueOf(id));
+                    hits.put(m.field(0), ids);
+                }
+                Coverage coverage = new Coverage(hits);
                 long timeout = config.timeoutMs() != null ? config.timeoutMs() : defaultTimeout(baselineMs);
 
                 // 4. The mutants.
@@ -200,7 +216,7 @@ public final class Engine {
                         + r.outcome().name().toLowerCase(java.util.Locale.ROOT) + " " + r.file() + ":" + r.position()
                         + " " + m.from() + " -> " + m.to());
                 }
-                return new Report(results, skipped, testCount, baselineMs, timeout);
+                return new Report(results, skipped, testCount, baselineMs, timeout, coverage);
             } finally {
                 if (worker != null) worker.close();
             }
@@ -221,7 +237,7 @@ public final class Engine {
         }
 
         int load() throws Failure, IOException {
-            List<Protocol.Message> reply = ask(Protocol.encode("load", loadList.toString()), LOAD_END, SETUP_TIMEOUT_MS);
+            List<Protocol.Message> reply = ask(Protocol.encode("load", loadList.toString(), String.valueOf(mutantCount), markerJar.toString()), LOAD_END, SETUP_TIMEOUT_MS);
             Protocol.Message last = reply.get(reply.size() - 1);
             if (!last.verb().equals("loaded")) throw failed("the schemata program does not compile", last);
             return Integer.parseInt(last.field(0));
