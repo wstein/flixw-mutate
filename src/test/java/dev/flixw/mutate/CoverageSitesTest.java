@@ -16,12 +16,14 @@ import java.util.stream.Collectors;
  * of the coverage spike (function entries, branches, lambda bodies, the lines they own), all rows of one site table.
  * Object: the fixture of the coverage spike, whose line annotations, {@code expected-functions.tsv} and
  * {@code expected-branches.tsv} are the truth, plus per-test truth written by hand from the test files; the calc
- * and the spike fixture for "regions change no mutant and no report line".
+ * and the spike fixture for "regions change no mutant and no report line"; the wide fixture of the selection spike
+ * for the mutants and the test selection.
  */
 public final class CoverageSitesTest {
     static final Path SPIKE = Path.of(System.getenv("FLIXW_TEST_COVERAGE_SPIKE")).toAbsolutePath();
     static final Path FIXTURE = SPIKE.resolve("fixture");
     static final Path CALC = SiteFinderTest.FIXTURE;
+    static final Path WIDE = SelectionTest.WIDE;
 
     static Engine.Config config(Path root) { return new Engine.Config(root, EngineTest.JAVA, EngineTest.CP, null); }
 
@@ -139,7 +141,7 @@ public final class CoverageSitesTest {
             }
         });
 
-        for (Path root : List.of(CALC, FIXTURE)) {
+        for (Path root : List.of(CALC, FIXTURE, WIDE)) {
             String name = root.getFileName().toString();
 
             c.test("regions change no mutant and no test selection (" + name + ")", () -> {
@@ -152,6 +154,7 @@ public final class CoverageSitesTest {
                 }
             });
 
+            if (root.equals(WIDE)) continue; // the reports of the wide fixture are compared by the run of the author (PR text)
             c.test("regions change no line of the report, with and without selection (" + name + ")", () -> {
                 for (boolean selection : new boolean[] {true, false}) {
                     Engine.Config base = selection ? config(root) : config(root).withoutSelection();

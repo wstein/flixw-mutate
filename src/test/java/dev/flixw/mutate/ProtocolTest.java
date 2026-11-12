@@ -37,6 +37,18 @@ public final class ProtocolTest {
             eq(s, Protocol.decodeSite(Protocol.decode(Protocol.encodeSite(s))));
         });
 
+        c.test("a region and an expression start round-trip", () -> {
+            Region r = new Region("/p/src/A b.flix", Point.Kind.ARM, new Span(10, 20), 3);
+            eq(r, Protocol.decodeRegion(Protocol.decode(Protocol.encodeRegion(r))));
+            Exec e = new Exec("/p/src/A b.flix", 12, 3);
+            eq(e, Protocol.decodeExec(Protocol.decode(Protocol.encodeExec(e))));
+        });
+
+        c.test("a point kind that is not a region kind is rejected", () -> {
+            throwsA(IllegalArgumentException.class, () -> new Region("/p/A.flix", Point.Kind.MUTANT, new Span(0, 1), 1));
+            throwsA(IllegalArgumentException.class, () -> new Region("/p/A.flix", Point.Kind.LINE, new Span(0, 1), 1));
+        });
+
         c.test("an unknown kind is rejected", () -> {
             throwsA(IllegalArgumentException.class,
                 () -> Protocol.decodeSite(Protocol.decode("site\tf\tOrder.nope\t1\t2\t1\t2\t-1\t-1")));

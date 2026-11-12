@@ -46,6 +46,8 @@ MATERIAL="If PSolve Solve.Project Stratification Solve.Simple" REPS=2 sh .../run
 
 Since #30 both harnesses also read the same truth through the engine's `SiteTable`/`Hits`/`Views` (lines `table ... compared:` in the output; the Datalog table covers rules, fact counts and the test without a solve, not the relation sizes).
 
+Since #28 (`Engine.Config.withRegions()`) the engine builds both kinds of site into one program: `RegionFinder` (the region and line method of this spike) reports regions and expression starts, `SitePlan` numbers mutants, regions and line parts in one id space, and a region is wrapped as `(if (FlixwMutant.on(n)) bug!(..) else { E })`. The marker is the engine's: `on(n)` records `n` and is true only for the active mutant, whose id is never a region id. `CoverageSitesTest` reads the lines, functions and branches of `fixture/` and the regions per test from one run's table (truth: the annotations, the two TSV files and per-test rows written by hand); with and without regions the mutants, the selected tests and the report lines are equal on `calc` and `fixture/`, and the mutants and selection on the wide fixture. Without the flag the engine is unchanged.
+
 Both scripts fetch the digest-checked `flix.jar` 0.79.0 (`../common/fetch-flix.sh`), compile with JDK 21 and use the Flix compiler API. Datalog `material` fetches the Flix test files at the pinned revision (`../common/fetch-flix-material.sh`; not copied). flix-invaders: `wstein/flix-invaders` at `5df5ac1312b6216a474ab80bf7dd6556f335e238`, cloned read-only into the scratch directory. Environment of the recorded runs (2026-11-11): Linux 7.2 aarch64 (OrbStack VM), 10 CPUs, 8 GB shared with other jobs, Temurin 21.0.13+9, Flix 0.79.0; load average 6 to 60 during the work (the timing tables name their runs). Counts are exact and repeatable; times are not benchmarks.
 
 ## 1. Functional part
@@ -242,7 +244,7 @@ Two sources behind that table:
 
 Decisions for the owner, with a recommendation:
 
-- Coverage compile: separate from the mutant compile at first (one more compile of 2 to 12 s depending on the machine load, no mixed code shapes; marker form and mutation helpers do not interact). A single program with both kinds of site saves that compile, needs the combined renderer and the check that the optimiser keeps both: UNKNOWN.
+- Coverage compile: separate from the mutant compile at first (one more compile of 2 to 12 s depending on the machine load, no mixed code shapes; marker form and mutation helpers do not interact). A single program with both kinds of site saves that compile; since #28 the engine can build it (`withRegions()`), and on the fixture, `calc` and the wide fixture the optimiser keeps both kinds (truth equal, mutants and selection equal); flix-invaders was not run with it.
 - Precondition for the source marker: the 13 markers missing in live flix-invaders functions (1.3) are explained or removed, else "not covered" can be false.
 - Datalog level in the first version: presence plus relation sizes, without the provenance solve (no hang, no second solve); provenance as an option with a documented limit (cyclic programs) or not at all until the own body evaluation is built.
 - Lines: expression-start model as in the spike (needs the typed-AST walk anyway); lambda regions on, loop bodies and lazy operands as listed limits, or regions for `and`/`or`, `foreach` and handler bodies as the next step (not measured).
@@ -263,4 +265,4 @@ Decisions for the owner, with a recommendation:
 
 ## 6. Not run (UNKNOWN)
 
-Flix versions other than 0.79.0; other operating systems; lattices (excluded); the engine with coverage sites built in (no engine change; the engine's `Marker` as the target); both site kinds in one program; `and`/`or`, loop, handler and `try` regions; trait default implementations (`Sig`); fact use at tuple level; JaCoCo (excluded); a real LCOV or Cobertura consumer; accuracy of line figures on flix-invaders; counts per region (boolean markers only); tests that spawn threads; a full mutation run (not part of this spike).
+Flix versions other than 0.79.0; other operating systems; lattices (excluded); flix-invaders and other large projects with both site kinds in one program (the fixture, `calc` and the wide fixture were run); `and`/`or`, loop, handler and `try` regions; trait default implementations (`Sig`); fact use at tuple level; JaCoCo (excluded); a real LCOV or Cobertura consumer; accuracy of line figures on flix-invaders; counts per region (boolean markers only); tests that spawn threads; a full mutation run (not part of this spike).
