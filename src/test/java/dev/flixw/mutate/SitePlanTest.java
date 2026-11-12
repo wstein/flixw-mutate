@@ -38,6 +38,21 @@ public final class SitePlanTest {
     public static void main(String[] args) {
         Check c = new Check("SitePlanTest");
 
+        c.test("Datalog rules and facts are rows of the same table, in order, without a marker and without a rewrite", () -> {
+            Span fn = at("x < 3");
+            DatalogSite rule = new DatalogSite(Point.Kind.RULE, "/p/src/A.flix", at("x + 1 > 0"), 1, "A.f", "A<-B");
+            DatalogSite fact = new DatalogSite(Point.Kind.FACT, "/p/src/A.flix", at("false"), 1, "A.f", "B(1)");
+            SitePlan p = SitePlan.build(List.of(new SitePlan.Input(F, SRC, List.of(less()), List.of(), List.of(), List.of(fact, rule))));
+            eq("1 MUTANT 1 " + fn.start() + "-" + fn.end() + "\n"
+                + "2 MUTANT 1 " + fn.start() + "-" + fn.end() + "\n"
+                + "3 RULE 1 " + rule.span().start() + "-" + rule.span().end() + "\n"
+                + "4 FACT 1 " + fact.span().start() + "-" + fact.span().end() + "\n", rows(p.table()));
+            eq(java.util.Map.of(3, rule, 4, fact), p.datalogSites());
+            eq(1, p.items(F).size()); // only the mutation site is rewritten
+        });
+
+        c.test("a plan without Datalog sites has none", () -> eq(java.util.Map.of(), plan(List.of(less()), List.of(), List.of()).datalogSites()));
+
         c.test("mutants, regions and line parts share one dense id space in the order of file, offset and wider span first", () -> {
             Span body = at("if (x < 3) x + 1 > 0 else false");
             Span thenB = at("x + 1 > 0");
