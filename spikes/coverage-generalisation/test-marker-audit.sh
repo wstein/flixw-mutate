@@ -7,6 +7,7 @@
 #   audit-reach three LIVE rows the audit must not take for dead: an instance def (class name with a numeric suffix), a
 #               dropped (@Inline) def applied by a live def, a dropped def applied only by a test: exit 1
 #   audit-allowed the audit-live case with an allow list (file, kind, line, reason): exit 0, the row is ALLOWED
+#   variants of audit-allowed: a row without a reason (exit 2), a row with another line, kind or file (exit 1, LIVE)
 #   fixture     the main fixture: exit 0, the entry of Grade.unused is the only missing marker and it is dead
 # Each project has an expected-missing.tsv (the audit's own marker-audit.tsv, compared as a whole).
 # Usage: SPIKE_WORK=<scratch dir> sh spikes/coverage-generalisation/test-marker-audit.sh
@@ -35,10 +36,27 @@ check() {
   fi
 }
 
+# variant <name> <allow-list line (4 tab-separated fields)> <expected exit code> <expected line in the output or the error log>
+# audit-allowed with another allow list: only the exact file, kind and line allow the row, and a row needs a reason.
+variant() {
+  n=$1; row=$2; want=$3; line=$4
+  rm -rf "$work/variant-$n"; mkdir -p "$work/variant-$n"
+  cp -R "$here/audit-allowed/src" "$here/audit-allowed/test" "$work/variant-$n/"
+  printf 'file\tkind\tline\treason\n%s\n' "$row" > "$work/variant-$n/marker-audit-allow.tsv"
+  SPIKE_WORK=$work JAVA_OPTS="-Dcov.auditOnly=true -Dcov.plain=false" sh "$here/run.sh" "$work/variant-$n" > "$work/variant-$n.out" 2> "$work/variant-$n.err"
+  rc=$?
+  [ "$rc" = "$want" ] && ok "variant $n: exit $want" || bad "variant $n: exit $rc, expected $want"
+  cat "$work/variant-$n.out" "$work/stderr-variant-$n.log" 2>/dev/null | grep -qF -- "$line" && ok "variant $n: has '$line'" || bad "variant $n: lacks '$line'"
+}
+
 check audit-live 1 'MISSING MARKER in a live function: ELSE src/Fold.flix:5 in Fold.lit'
 check audit-dead 0 'inside a dead function 9, allowed 0, LIVE function 0'
 check audit-reach 1 'MISSING MARKER in a live function: ELSE src/Reach.flix:28 in Direct.only'
 check audit-allowed 0 'allowed 1, LIVE function 0'
+variant empty-reason "$(printf 'src/Fold.flix\tELSE\t5\t')" 2 'expected file, kind, line and a reason'
+variant wrong-line "$(printf 'src/Fold.flix\tELSE\t6\tx')" 1 'MISSING MARKER in a live function: ELSE src/Fold.flix:5 in Fold.lit'
+variant wrong-kind "$(printf 'src/Fold.flix\tTHEN\t5\tx')" 1 'MISSING MARKER in a live function: ELSE src/Fold.flix:5 in Fold.lit'
+variant wrong-file "$(printf 'src/Other.flix\tELSE\t5\tx')" 1 'MISSING MARKER in a live function: ELSE src/Fold.flix:5 in Fold.lit'
 check fixture 0 'LIVE function 0'
 echo "marker audit: $pass passed, $fail failed"
 [ "$fail" = 0 ]
