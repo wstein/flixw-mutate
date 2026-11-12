@@ -16,15 +16,14 @@ final class DatalogFinder {
     private final Map<String, String> files;
     private final IdentityHashMap<Object, Boolean> seen = new IdentityHashMap<>();
     private final List<DatalogSite> sites = new ArrayList<>();
-    private int skipped;
 
     private DatalogFinder(FlixApi api, Map<String, String> files) {
         this.api = api;
         this.files = files;
     }
 
-    /** The sites (walk order, not sorted) and the number of constraints left out (a span the text cannot give). */
-    record Result(List<DatalogSite> sites, int skipped) {}
+    /** The sites in walk order, not sorted. A constraint whose span the text cannot give is left out. */
+    record Result(List<DatalogSite> sites) {}
 
     /**
      * @param root  the typed AST root of the checked program
@@ -33,7 +32,7 @@ final class DatalogFinder {
     static Result find(FlixApi api, Object root, Map<String, String> files) {
         DatalogFinder f = new DatalogFinder(api, files);
         f.walk(root);
-        return new Result(f.sites, f.skipped);
+        return new Result(f.sites);
     }
 
     private record Frame(Object node, String def) {}
@@ -63,10 +62,7 @@ final class DatalogFinder {
         int line = (Integer) FlixApi.call(loc, "startLine");
         int s = SiteFinder.offset(text, line, (Integer) FlixApi.call(loc, "startCol"));
         int e = SiteFinder.offset(text, (Integer) FlixApi.call(loc, "endLine"), (Integer) FlixApi.call(loc, "endCol"));
-        if (s < 0 || e < s) {
-            skipped++;
-            return;
-        }
+        if (s < 0 || e < s) return;
         List<Object> body = api.children(FlixApi.call(node, "body"));
         String head = String.valueOf(FlixApi.call(FlixApi.call(FlixApi.call(node, "head"), "pred"), "name"));
         if (body.isEmpty()) {
