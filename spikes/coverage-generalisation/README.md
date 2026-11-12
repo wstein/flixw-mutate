@@ -171,7 +171,8 @@ Findings about the hook input (0.79.0):
 | index off by one (`let i = rule`) | 7 deviations (derived counts shift to the wrong rule) |
 | skip every solve with a `$Result` rule | 5 deviations (rules, facts and relations of `evens`, one test without a solve more) |
 | relation sizes + 2 (`HOOK=` copy) | `expected-relations.tsv`: solves per test, relation sizes, tuples from facts (12 comparisons in all) | 2 deviations |
-| fact tuples shifted into the rule counts (edb prefix) | same | 5 deviations at the rule rows; a hook that only blanks `edb` is not caught (n/a is legal without provenance) |
+| fact tuples shifted into the rule counts (edb prefix) | same | 5 deviations at the rule rows |
+| `edb` blanked, rule counts kept (`HOOK=` copy writing `,r0,r1,...`) | same | 2 deviations (`testReachable`, `testEvens`: edb n/a with provenance); n/a stays legal without provenance (`noprov` run: 6 rule deviations, relation rows pass) |
 | `$Result`-only solves recorded as solves of the program | same | 1 deviation (2 solves for `testReachable`) |
 | `-Dflixw.covcfg.noprov=1` (no second solve) | 6 deviations: derived is n/a; solves per test, facts, relation sizes and fact-derived tuples (n/a) are still compared and agree |
 
