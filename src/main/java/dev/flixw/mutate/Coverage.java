@@ -3,9 +3,9 @@ package dev.flixw.mutate;
 import java.util.List;
 
 /**
- * What the baseline run recorded: the table of the mutants (one {@link Point.Kind#MUTANT} per switch number) and,
- * for each test, the switches whose site it evaluated (level {@link Hits#REACHED}). Test selection reads through
- * this table.
+ * What the baseline run recorded: the site table (one {@link Point.Kind#MUTANT} row per switch number of a mutant;
+ * with regions on also the region rows and the {@link Point.Kind#LINE} rows they own) and, for each test, the ids
+ * whose site it evaluated (level {@link Hits#REACHED}). Test selection reads the MUTANT rows through this table.
  */
 public record Coverage(SiteTable sites, Hits hits) {
     /** The tests of the baseline run, in name order. */
