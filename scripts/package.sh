@@ -40,6 +40,7 @@ cp -R "$sdk/kit/resources/." "$classes/"
 cp "$root/sdk-source.properties" "$classes/dev/flixw/plugin/sdk-source.properties"
 # The repository license travels with the jar (the SDK license arrives from kit/resources).
 mkdir -p "$classes/META-INF"
+[ ! -e "$classes/META-INF/LICENSE" ] || { echo 'package: the SDK pin ships META-INF/LICENSE; it would be overwritten by the repository LICENSE' >&2; exit 1; }
 cp "$root/LICENSE" "$classes/META-INF/LICENSE"
 printf 'Main-Class: dev.flixw.plugin.PluginMain\nImplementation-Version: %s\n' "$version" \
   > "$work/MANIFEST.MF"
