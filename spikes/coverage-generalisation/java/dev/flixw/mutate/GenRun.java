@@ -310,6 +310,8 @@ public final class GenRun {
             rec = rec.substring(0, rec.indexOf("end_of_record"));
             String cl = cob.substring(cob.indexOf("filename=\"" + rel.get(f) + "\""));
             cl = cl.substring(0, cl.indexOf("</class>"));
+            // only the line elements of the class: the <method> elements carry hits of their own
+            cl = cl.substring(cl.indexOf("</methods>"));
             for (int i = 0; i < ls.length; i++) {
                 String t = ls[i].stripTrailing();
                 int k = t.lastIndexOf("// ");

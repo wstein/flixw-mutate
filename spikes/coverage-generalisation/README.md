@@ -85,7 +85,8 @@ Counter-probes (each run must fail at the intended cause; recorded runs):
 | no lambda regions | `-Dcov.lambdas=false` | `Grade.flix:25` expected P, got H (1 deviation): the lambda in `total(Nil)` never runs, its line reads as hit |
 | a line is owned by the outermost region | `-Dcov.sabotage=outer` | 10 deviations: 8 lines (every line inside an unhit branch reads H) and the 2 limit rows; functions and branches unaffected |
 | markers never record | `-Dcov.sabotage=nomarks` | 43 deviations: 20 lines, 9 functions, 12 branches, 2 limit rows |
-| a partly hit line written as `DA:n,0` in LCOV (`-Dcov.sabotage=dap`) | format values are compared with the annotations (26 lines, LCOV `DA` and Cobertura `hits`) | 2 deviations (`Grade.flix:25`, `:35`); `check-formats.py` alone passes this output (0 violations) |
+| a partly hit line written as `DA:n,0` in LCOV (`-Dcov.sabotage=dap`) | format values are compared with the annotations (26 lines, LCOV `DA` and the `hits` of the Cobertura `<line>` elements of the class, not of its `<method>` elements) | 2 deviations (`Grade.flix:25`, `:35`); `check-formats.py` alone passes this output (0 violations) |
+| a partly hit line written as `hits="0"` on a Cobertura branch line (`-Dcov.sabotage=dapc`) | the format check reads only the `<lines>` of the class, not the `<method>` elements | 1 deviation (`Grade.flix:35`); with the scan from `filename=` to `</class>` the run passed (the `<method>` line element has `hits="1"`) |
 | a limits row changed (`Limits.flix:6` tool value M) | a copy of `fixture/` with that edit | 1 deviation: the tool still says H |
 | a Cobertura writer without `complexity` on `<method>` | (earlier version) | `check-formats.py`: 10 violations of `coverage-04.dtd`, 0 after the fix |
 
