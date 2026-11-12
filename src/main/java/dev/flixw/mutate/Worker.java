@@ -26,7 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <li>{@code sites <listfile> [regions]}: type-checks the files of the list and answers one {@code site} message per
  *   site and {@code done <left out>}; {@code compile-error <message>...} if the program does not compile. With
  *   {@code regions} it also answers one {@code region} message per coverage region and one {@code exec} message per
- *   expression start of the {@code M} files, and {@code regions-left-out <n>}, before {@code done}.
+ *   expression start of the {@code M} files, before {@code done}.
  * <li>{@code load <listfile> <switches> <markerjar>}: compiles and loads the program with the marker jar
  *   (written there if it does not exist; the switches are 1 to {@code switches}: the ids of the mutants and of the
  *   regions); {@code loaded <tests>} or {@code compile-error}.
@@ -111,7 +111,6 @@ public final class Worker {
             RegionFinder.Result found = RegionFinder.find(api, checked.root(), mutable);
             for (Region g : found.regions()) out.println(Protocol.encodeRegion(g));
             for (Exec e : found.execs()) out.println(Protocol.encodeExec(e));
-            out.println(Protocol.encode("regions-left-out", String.valueOf(found.skipped())));
         }
         out.println(Protocol.encode("done", String.valueOf(r.skipped())));
     }
