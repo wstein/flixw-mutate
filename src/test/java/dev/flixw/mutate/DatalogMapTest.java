@@ -37,6 +37,11 @@ public final class DatalogMapTest {
             eq(set(2), DatalogMap.reached(s, "M.t", List.of(), List.of("S(1).")));
         });
 
+        c.test("the fallback by predicate name reaches facts only, not a rule with the same head", () -> {
+            Map<Integer, DatalogSite> s = sites(rule("M.a", "S<-B"), fact("M.a", "S(x)"));
+            eq(set(2), DatalogMap.reached(s, "M.t", List.of(), List.of("S(5).")));
+        });
+
         c.test("a fact is reached by its text; white space and the final dot do not count", () -> {
             Map<Integer, DatalogSite> s = sites(fact("M.a", "Edge(1,2)"), fact("M.a", "Edge(2,3)"));
             eq(set(1), DatalogMap.reached(s, "M.t", List.of(), List.of("Edge(1, 2).")));
