@@ -197,7 +197,9 @@ public final class DatalogGen {
                     java.util.TreeSet<String> rel = new java.util.TreeSet<>(List.of(s0.rel().split(",")));
                     java.util.TreeSet<String> exp = new java.util.TreeSet<>(List.of(c[2].split(",")));
                     got = s0.rel() + " edb " + s0.edb();
-                    ok = rel.equals(exp) && (s0.edb() < 0 || s0.edb() == Long.parseLong(c[3]));
+                    // n/a (edb < 0) is legal only without provenance, where no rule has a derived count either
+                    boolean noProv = s0.rules().stream().allMatch(r -> r.derived() < 0);
+                    ok = rel.equals(exp) && (s0.edb() < 0 ? noProv : s0.edb() == Long.parseLong(c[3]));
                 }
                 if (!ok) { bad++; out.println("DEVIATION relations " + c[0] + " expected solves " + c[1] + " " + c[2] + " edb " + c[3] + ", got " + sv.size() + " " + got); }
             }
