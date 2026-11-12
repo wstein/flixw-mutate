@@ -111,6 +111,17 @@ public final class SolverPatchTest {
             eq(List.of("hook x", "orig true x"), LOG);
         });
 
+        c.test("a truncated class, a class with trailing bytes and an empty one are refused with NotAsExpected", () -> {
+            byte[] o = original();
+            for (int cut : new int[] {1, 10, 200, 600}) {
+                byte[] shorter = java.util.Arrays.copyOf(o, o.length - cut);
+                throwsA(SolverPatch.NotAsExpected.class, () -> SolverPatch.wrap(shorter, "staticApply", DESC, HOOK, "hook"));
+            }
+            byte[] longer = java.util.Arrays.copyOf(o, o.length + 1);
+            throwsA(SolverPatch.NotAsExpected.class, () -> SolverPatch.wrap(longer, "staticApply", DESC, HOOK, "hook"));
+            throwsA(SolverPatch.NotAsExpected.class, () -> SolverPatch.wrap(new byte[0], "staticApply", DESC, HOOK, "hook"));
+        });
+
         c.test("a method that is not there, a wrong descriptor and a class that is already wrapped are refused", () -> {
             throwsA(SolverPatch.NotAsExpected.class, () -> SolverPatch.wrap(original(), "nothing", DESC, HOOK, "hook"));
             throwsA(SolverPatch.NotAsExpected.class, () -> SolverPatch.wrap(original(), "staticApply", "(I)I", HOOK, "hook"));
