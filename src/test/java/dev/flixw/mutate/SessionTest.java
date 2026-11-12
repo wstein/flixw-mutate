@@ -62,13 +62,15 @@ public final class SessionTest {
             Path work = Files.createTempDirectory("session-test");
             Session s = session(work);
             s.workDir.dispose();
-            boolean refused = false;
+            String refusal = null;
             try {
                 s.startWorker();
             } catch (Engine.Failure e) {
-                refused = true;
+                refusal = e.getMessage();
             }
-            yes(refused, "the worker start was not refused");
+            // Without the refusal in WorkDir.run the worker.log redirect fails as well, with another message.
+            yes(refusal != null && refusal.contains("the work directory is already removed"),
+                "the worker start was not refused by the work directory: " + refusal);
             eq(false, s.workerAlive());
             eq(false, Files.exists(work));
         });
