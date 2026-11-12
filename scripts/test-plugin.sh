@@ -57,7 +57,7 @@ contains err 'unknown argument: one'
 run 0 --version FLIXW_ABI_VERSION=1
 contains out "flixw-mutate plugin=$version sdk=$revision"
 run 0 --help FLIXW_ABI_VERSION=1
-contains out 'usage: ./flixw mutate [--timeout-ms <ms>] [--no-selection] [--fail-on-survived] | --help | --version'
+contains out 'usage: ./flixw mutate [--timeout-ms <ms>] [--no-selection] [--no-order] [--fail-on-survived] | --help | --version'
 # Options.
 full 2 '--timeout-ms'
 contains err 'usage'
@@ -69,6 +69,8 @@ full 2 '--fail-on-survived --fail-on-survived'
 contains err '--fail-on-survived given twice'
 full 2 '--no-selection --no-selection'
 contains err '--no-selection given twice'
+full 2 '--no-order --no-order'
+contains err '--no-order given twice'
 full 2 '--timeout-ms 5 --timeout-ms 6'
 contains err '--timeout-ms given twice'
 # An empty project: nothing to mutate, a report with zero mutants.
@@ -99,6 +101,9 @@ contains out 'mutation score: 70.6%'
 full 0 '--no-selection' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
 contains out 'mutants: 34 (killed 23, survived 10, not covered 0, timeout 1); sites left out: 0'
 contains out 'test selection: off'
+# Without the order of the selected tests the outcomes are the same on this fixture.
+full 0 '--no-order' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'mutants: 34 (killed 23, survived 9, not covered 1, timeout 1); sites left out: 0'
 # A project whose only unkilled mutant is `not covered` (g is never called): --fail-on-survived must still exit 1.
 mkdir -p "$work/uncovered/src" "$work/uncovered/test"
 printf 'mod A {\n    pub def f(x: Int32): Int32 = x + 1\n    pub def g(x: Int32): Int32 = x * 2\n}\n' > "$work/uncovered/src/A.flix"
