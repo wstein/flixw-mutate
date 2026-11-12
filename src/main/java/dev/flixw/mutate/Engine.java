@@ -27,30 +27,37 @@ public final class Engine {
      * @param selection       run only the tests that evaluate the mutant's site (false: all tests for every mutant)
      * @param regions         also mark the regions of the code (function entries, branches, lambda bodies) and the lines they own
      *                        in the same program; they are rows of the site table and change no mutant, no outcome and no report line
+     * @param datalog         also record which test solves which Datalog rule and fact (rows of the site table, level reached);
+     *                        off: the run is as before
      */
     public record Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
-                         boolean selection, boolean regions) {
+                         boolean selection, boolean regions, boolean datalog) {
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs) {
             this(projectRoot, java, workerClasspath, timeoutMs, line -> { });
         }
 
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress) {
-            this(projectRoot, java, workerClasspath, timeoutMs, progress, true, false);
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, true, false, false);
         }
 
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
                       boolean selection) {
-            this(projectRoot, java, workerClasspath, timeoutMs, progress, selection, false);
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, selection, false, false);
         }
 
         /** The same run with every test for every mutant. */
         public Config withoutSelection() {
-            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, false, regions);
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, false, regions, datalog);
         }
 
         /** The same run with the regions of the code marked in the program as well. */
         public Config withRegions() {
-            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, true);
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, true, datalog);
+        }
+
+        /** The same run with the Datalog rules and facts of the sources recorded per test as well. */
+        public Config withDatalog() {
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, regions, true);
         }
     }
 
