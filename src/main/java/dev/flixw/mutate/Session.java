@@ -49,6 +49,7 @@ final class Session implements AutoCloseable {
     private SitePlan plan;
     private List<String> testNames = List.of();
     private boolean empty;
+    private boolean warnedNoSolver;
 
     Session(Engine.Config config, Path root, List<Path> src, List<Path> tests, Path work) {
         this.config = config;
@@ -312,6 +313,12 @@ final class Session implements AutoCloseable {
             LOAD_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);
         if (!last.verb().equals("loaded")) throw failed("the schemata program does not compile", last);
+        if (config.datalog() && last.fields().size() > 1 && last.field(1).equals("no-solver") && !plan.datalogSites().isEmpty() && !warnedNoSolver) {
+            warnedNoSolver = true;
+            config.progress().accept("warning: datalog: the compiled program has no Fixpoint3 solver class "
+                + "(the sources have rules and facts, but nothing solves them, or this Flix version names the class differently): "
+                + "every rule and fact reads not covered");
+        }
         return Integer.parseInt(last.field(0));
     }
 

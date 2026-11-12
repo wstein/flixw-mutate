@@ -30,8 +30,9 @@ import java.util.concurrent.LinkedBlockingQueue;
  *   message per Datalog rule and fact of the {@code M} files, before {@code done}.
  * <li>{@code load <listfile> <switches> <markerjar> [datalog]}: compiles and loads the program with the marker jar
  *   (written there if it does not exist; the switches are 1 to {@code switches}: the ids of the mutants and of the
- *   regions); {@code loaded <tests>} or {@code compile-error}. With {@code datalog} the compiled Fixpoint3 solver
- *   calls the hook module {@code FlixwDatalog} of the list ({@link DatalogHook}) on every solve.
+ *   regions); {@code loaded <tests> [no-solver]} or {@code compile-error}. With {@code datalog} the compiled Fixpoint3 solver
+ *   calls the hook module {@code FlixwDatalog} of the list ({@link DatalogHook}) on every solve; {@code no-solver}
+ *   says that the program has no solver class, so nothing is hooked.
  * <li>{@code run <n> [<test>...]}: sets the switch to mutant {@code n} (0: none), runs the named tests in the
  *   given order (all tests in name order without names) and stops at the first failure:
  *   {@code result survived <tests run>} or {@code result killed <test> <description> <tests run>}.
@@ -141,8 +142,11 @@ public final class Worker {
             return;
         }
         // the hook's own @Test keeps the hook in the program; it is not a test of the project
+        boolean hooked = ((FlixApi.Program) r).hooked();
         tests = api.tests((FlixApi.Program) r).stream().filter(t -> !t.skip() && !t.name().startsWith(DATALOG_MODULE + ".")).toList();
-        out.println(Protocol.encode("loaded", String.valueOf(tests.size())));
+        // with datalog, a second field says that the program has no solver class to hook
+        out.println(hookSolver && !hooked ? Protocol.encode("loaded", String.valueOf(tests.size()), "no-solver")
+            : Protocol.encode("loaded", String.valueOf(tests.size())));
     }
 
     private void compileError(FlixApi.Failure failure) {

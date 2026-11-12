@@ -63,8 +63,10 @@ final class FlixApi {
         return new Checked(root, messages.isEmpty() ? null : new Failure(messages));
     }
 
-    /** A compiled and loaded program. */
-    record Program(Object loaded) {}
+    /** A compiled and loaded program; {@code hooked}: the solver class was rewritten (see {@link #compileAndLoad(List, List, boolean)}). */
+    record Program(Object loaded, boolean hooked) {
+        Program(Object loaded) { this(loaded, false); }
+    }
 
     /** Compiles and loads the files; the result is a {@link Program} or the errors. */
     Object compileAndLoad(List<Path> files) { return compileAndLoad(files, List.of()); }
@@ -74,7 +76,8 @@ final class FlixApi {
 
     /**
      * Compiles and loads the files with the Java libraries {@code jars}; with {@code hookSolver} the compiled
-     * solver of Fixpoint3 calls {@link Splice#before} on its input (see {@link #hookSolver}).
+     * solver of Fixpoint3 calls {@link Splice#before} on its input (see {@link #hookSolver}); {@link Program#hooked}
+     * tells whether the program had a solver class to rewrite.
      */
     Object compileAndLoad(List<Path> files, List<Path> jars, boolean hookSolver) {
         Object flix = newFlix(files, jars);
@@ -82,9 +85,14 @@ final class FlixApi {
         String kind = result.getClass().getSimpleName();
         if (kind.equals("Ok")) {
             Object compiled = call(result, "t");
-            if (hookSolver) compiled = hookSolver(compiled);
+            boolean hooked = false;
+            if (hookSolver) {
+                Object hook = hookSolver(compiled);
+                hooked = hook != compiled;
+                compiled = hook;
+            }
             Object loaded = call(module("ca.uwaterloo.flix.runtime.JvmLoader$"), "load", compiled);
-            return new Program(loaded);
+            return new Program(loaded, hooked);
         }
         return new Failure(messages(call(result, "e")));
     }
