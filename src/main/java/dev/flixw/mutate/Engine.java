@@ -25,20 +25,32 @@ public final class Engine {
      * @param timeoutMs       timeout per mutant, or null: ten times the baseline run, at least 2000 ms
      * @param progress        receives one line per finished mutant
      * @param selection       run only the tests that evaluate the mutant's site (false: all tests for every mutant)
+     * @param regions         also mark the regions of the code (function entries, branches, lambda bodies) and the lines they own
+     *                        in the same program; they are rows of the site table and change no mutant, no outcome and no report line
      */
     public record Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
-                         boolean selection) {
+                         boolean selection, boolean regions) {
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs) {
             this(projectRoot, java, workerClasspath, timeoutMs, line -> { });
         }
 
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress) {
-            this(projectRoot, java, workerClasspath, timeoutMs, progress, true);
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, true, false);
+        }
+
+        public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
+                      boolean selection) {
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, selection, false);
         }
 
         /** The same run with every test for every mutant. */
         public Config withoutSelection() {
-            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, false);
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, false, regions);
+        }
+
+        /** The same run with the regions of the code marked in the program as well. */
+        public Config withRegions() {
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, true);
         }
     }
 
