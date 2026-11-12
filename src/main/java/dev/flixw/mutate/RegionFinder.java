@@ -19,15 +19,14 @@ final class RegionFinder {
     private final IdentityHashMap<Object, Boolean> seen = new IdentityHashMap<>();
     private final List<Region> regions = new ArrayList<>();
     private final List<Exec> execs = new ArrayList<>();
-    private int skipped;
 
     private RegionFinder(FlixApi api, Map<String, String> files) {
         this.api = api;
         this.files = files;
     }
 
-    /** The regions (in walk order, not sorted), the expression starts and the number of candidates left out. */
-    record Result(List<Region> regions, List<Exec> execs, int skipped) {}
+    /** The regions (in walk order, not sorted) and the expression starts. */
+    record Result(List<Region> regions, List<Exec> execs) {}
 
     /**
      * @param root  the typed AST root of the checked program
@@ -36,7 +35,7 @@ final class RegionFinder {
     static Result find(FlixApi api, Object root, Map<String, String> files) {
         RegionFinder f = new RegionFinder(api, files);
         f.walk(root);
-        return new Result(f.regions, f.execs, f.skipped);
+        return new Result(f.regions, f.execs);
     }
 
     /** A node with the file of the def around it, or null outside the defs of the files. */
@@ -85,10 +84,7 @@ final class RegionFinder {
         boolean isMatch = name.equals("TypedAst$Expr$Match");
         if (isIf || isMatch) {
             boolean written = o >= 0 && text.startsWith(isIf ? "if" : "match", o);
-            if (!written) {
-                skipped++;
-                return;
-            }
+            if (!written) return;
         }
         if (isIf) {
             region(Point.Kind.THEN, file, FlixApi.call(node, "exp2"), line);
@@ -120,10 +116,7 @@ final class RegionFinder {
         int s = SiteFinder.offset(text, line(loc, false), (Integer) FlixApi.call(loc, "startCol"));
         int e = SiteFinder.offset(text, line(loc, true), (Integer) FlixApi.call(loc, "endCol"));
         if (s < 0 || e < s) return;
-        if (!balanced(text.substring(s, e))) {
-            skipped++;
-            return;
-        }
+        if (!balanced(text.substring(s, e))) return;
         regions.add(new Region(file, kind, new Span(s, e), line));
     }
 

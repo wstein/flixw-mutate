@@ -47,7 +47,6 @@ final class Session implements AutoCloseable {
     private Coverage coverage;
     private SiteTable siteTable;
     private SitePlan plan;
-    private int skippedRegions;
     private List<String> testNames = List.of();
     private boolean empty;
 
@@ -72,9 +71,6 @@ final class Session implements AutoCloseable {
     String position(Mutant m) { return positions.get(m.id()); }
 
     int skippedSites() { return skipped; }
-
-    /** Regions left out: the worker's guards and the regions that overlap a site badly (0 without regions). */
-    int skippedRegions() { return skippedRegions; }
 
     int testCount() { return testCount; }
 
@@ -150,7 +146,6 @@ final class Session implements AutoCloseable {
                     Exec e = Protocol.decodeExec(m);
                     execs.computeIfAbsent(e.file(), k -> new ArrayList<>()).add(e);
                 }
-                case "regions-left-out" -> skippedRegions += Integer.parseInt(m.field(0));
                 default -> { }
             }
         skipped = Integer.parseInt(last.field(0));
@@ -170,7 +165,6 @@ final class Session implements AutoCloseable {
                 execs.getOrDefault(p.toString(), List.of())));
         }
         plan = SitePlan.build(inputs);
-        skippedRegions += plan.skippedRegions();
         List<String> loadLines = new ArrayList<>();
         Path rendered = work.resolve("rendered");
         for (Path p : src) {
