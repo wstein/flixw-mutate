@@ -83,7 +83,7 @@ public final class DatalogHitsTest {
             Report r = Engine.run(config());
             String text = r.format();
             yes(text.contains("datalog sites: rules 7, facts 8, not covered 1"), text);
-            yes(text.contains("not covered  src/DlNet.flix:14  rule"), text);
+            yes(text.contains("not covered src/DlNet.flix:15  rule"), text);
         });
 
         c.test("without the switch the table has no Datalog rows and the report no Datalog line", () -> {
