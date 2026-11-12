@@ -48,6 +48,10 @@ final class Session implements AutoCloseable {
     private SiteTable siteTable;
     private SitePlan plan;
     private List<String> testNames = List.of();
+    /** Orders the selected tests of a mutant; built from the baseline durations. */
+    private TestOrder order = new TestOrder(Map.of());
+    /** Duration per test of the last baseline run, in nanoseconds. */
+    private Map<String, Long> testNanos = Map.of();
     private boolean empty;
     private boolean warnedNoSolver;
 
@@ -222,6 +226,7 @@ final class Session implements AutoCloseable {
         coverage = baseline(List.of());
         baselineMs = (System.nanoTime() - t0) / 1_000_000;
         testNames = coverage.tests();
+        order = new TestOrder(testNanos);
         timeout = config.timeoutMs() != null ? config.timeoutMs() : Engine.defaultTimeout(baselineMs);
     }
 
@@ -239,6 +244,10 @@ final class Session implements AutoCloseable {
         if (base.field(0).equals("killed"))
             throw new Engine.Failure("tests fail without a mutation: " + base.field(1) + ": " + base.field(2));
         List<Protocol.Message> perTest = reply.subList(0, reply.size() - 1).stream().filter(m -> m.verb().equals("covered")).toList();
+        Map<String, Long> nanos = new java.util.HashMap<>();
+        for (Protocol.Message m : reply)
+            if (m.verb().equals("timed")) nanos.put(m.field(0), Long.parseLong(m.field(1)));
+        testNanos = nanos;
         Hits.Builder hits = new Hits.Builder(siteTable, perTest.stream().map(m -> m.field(0)).toList());
         for (Protocol.Message m : perTest)
             for (String id : m.fields().subList(1, m.fields().size())) {
@@ -273,13 +282,18 @@ final class Session implements AutoCloseable {
         return baseline(order);
     }
 
-    /** Runs mutant {@code m}: with test selection only the tests that evaluate its site. */
+    /**
+     * Runs mutant {@code m}: with test selection only the tests that evaluate its site, fast and often killing
+     * tests first ({@link TestOrder}); the outcome does not depend on the order.
+     */
     Result run(Mutant m) throws Engine.Failure, IOException {
         if (!config.selection()) return run(m, testNames, false);
-        List<String> selected = coverage.testsFor(m.id());
+        List<String> selected = order.order(coverage.testsFor(m.id()));
         if (selected.isEmpty())
             return new Result(m, file(m), position(m), Outcome.NOT_COVERED, "", 0, 0, testCount);
-        return run(m, selected, true);
+        Result r = run(m, selected, true);
+        if (r.outcome() != Outcome.TIMEOUT) order.record(selected, r.executed(), r.outcome() == Outcome.KILLED);
+        return r;
     }
 
     /** Runs mutant {@code m} with the named tests only, in the given order. */

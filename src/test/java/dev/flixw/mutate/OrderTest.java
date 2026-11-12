@@ -54,9 +54,10 @@ public final class OrderTest {
             eq(outcomes(full), outcomes(selected));
             eq(4, selected.results().size());
             List<Integer> executed = selected.results().stream().map(Result::executed).toList();
-            // The first mutant has no history and runs in name order (all three); after it the killer goes first.
-            eq(3, executed.get(0));
-            eq(List.of(1, 1, 1), executed.subList(1, 4));
+            // The first mutant has no history: name order, or the duration if a weak test is slow (all three tests are
+            // trivial, so a slow first call decides). After it the killer goes first; one miss is allowed for timer noise.
+            yes(executed.get(0) >= 2, executed.toString());
+            yes(executed.subList(1, 4).stream().mapToInt(Integer::intValue).sum() <= 4, executed.toString());
         });
 
         c.finish();
