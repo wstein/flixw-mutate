@@ -70,15 +70,52 @@ final class FlixApi {
     Object compileAndLoad(List<Path> files) { return compileAndLoad(files, List.of()); }
 
     /** Compiles and loads the files with the Java libraries {@code jars}. */
-    Object compileAndLoad(List<Path> files, List<Path> jars) {
+    Object compileAndLoad(List<Path> files, List<Path> jars) { return compileAndLoad(files, jars, false); }
+
+    /**
+     * Compiles and loads the files with the Java libraries {@code jars}; with {@code hookSolver} the compiled
+     * solver of Fixpoint3 calls {@link Splice#before} on its input (see {@link #hookSolver}).
+     */
+    Object compileAndLoad(List<Path> files, List<Path> jars, boolean hookSolver) {
         Object flix = newFlix(files, jars);
         Object result = call(flix, "compile");
         String kind = result.getClass().getSimpleName();
         if (kind.equals("Ok")) {
-            Object loaded = call(module("ca.uwaterloo.flix.runtime.JvmLoader$"), "load", call(result, "t"));
+            Object compiled = call(result, "t");
+            if (hookSolver) compiled = hookSolver(compiled);
+            Object loaded = call(module("ca.uwaterloo.flix.runtime.JvmLoader$"), "load", compiled);
             return new Program(loaded);
         }
         return new Failure(messages(call(result, "e")));
+    }
+
+    /** The class of the solver in a compiled program, and the method and descriptor that {@link #hookSolver} wraps (Flix 0.79.0). */
+    static final String SOLVER_CLASS = "Fixpoint3.Solver.Def$runSolverInternal";
+    static final String SOLVER_METHOD = "staticApply";
+    static final String SOLVER_DESC = "(ZLTagged$;)Ldev/flix/runtime/Result$;";
+
+    /**
+     * Returns the compilation result with the solver class rewritten by {@link SolverPatch}, or the same result if the
+     * program has no solver class (it never calls the solver). Throws {@link SolverPatch.NotAsExpected} if the class
+     * is not as the contract says.
+     */
+    private Object hookSolver(Object compiled) {
+        Object root = call(compiled, "root");
+        Object classes = call(root, "classes");
+        java.lang.constant.ClassDesc target = java.lang.constant.ClassDesc.of(SOLVER_CLASS);
+        Object found = via("scala.collection.immutable.Map", classes, "get", target);
+        if (!(Boolean) via("scala.Option", found, "isDefined")) return compiled;
+        byte[] patched = SolverPatch.wrap((byte[]) call(via("scala.Option", found, "get"), "bytecode"), SOLVER_METHOD, SOLVER_DESC,
+            Splice.class.getName().replace('.', '/'), "before");
+        try {
+            Object jvmClass = cls("ca.uwaterloo.flix.language.phase.jvm.JvmClass").getConstructors()[0].newInstance(target, patched);
+            Object newClasses = via("scala.collection.immutable.MapOps", classes, "updated", target, jvmClass);
+            Object newRoot = call(root, "copy", newClasses, call(root, "tests"), call(root, "main"), call(root, "sources"));
+            return cls("ca.uwaterloo.flix.runtime.CompilationResult").getConstructors()[0]
+                .newInstance(newRoot, call(compiled, "totalTime"), call(compiled, "codeSize"), call(compiled, "flix"));
+        } catch (ReflectiveOperationException e) {
+            throw new ApiError("Flix API not as expected: " + e, e);
+        }
     }
 
     /** One test of a loaded program: its name, whether it is marked skip, and a way to run it. */
