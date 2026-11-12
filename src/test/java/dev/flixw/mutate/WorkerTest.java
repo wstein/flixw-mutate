@@ -45,6 +45,45 @@ public final class WorkerTest {
         }
     }
 
+    /**
+     * Like {@link #endedByEof} with an answer: sends {@code load}, then {@code baseline} after the {@code loaded}
+     * line, closes stdin after the first {@code covered} line and waits {@code seconds} for the exit.
+     */
+    static int endedAfterLine(String load, int seconds) throws Exception {
+        Process p = new ProcessBuilder(JAVA.toString(), "-cp", CP, Worker.class.getName())
+            .redirectOutput(ProcessBuilder.Redirect.PIPE).redirectError(ProcessBuilder.Redirect.DISCARD).start();
+        try {
+            java.io.BufferedReader answer = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
+            p.getOutputStream().write(load.getBytes(StandardCharsets.UTF_8));
+            p.getOutputStream().flush();
+            String line = readLine(answer);
+            if (line == null || !line.startsWith("loaded")) return -2;
+            p.getOutputStream().write((Protocol.encode("baseline") + "\n").getBytes(StandardCharsets.UTF_8));
+            p.getOutputStream().flush();
+            line = readLine(answer);
+            if (line == null || !line.startsWith("covered")) return -2;
+            p.getOutputStream().close();
+            return p.waitFor(seconds, TimeUnit.SECONDS) ? p.exitValue() : -1;
+        } finally {
+            p.destroyForcibly().waitFor();
+        }
+    }
+
+    private static String readLine(java.io.BufferedReader in) throws Exception {
+        String[] line = new String[1];
+        Thread reader = new Thread(() -> {
+            try {
+                line[0] = in.readLine();
+            } catch (java.io.IOException e) {
+                // no line
+            }
+        });
+        reader.setDaemon(true);
+        reader.start();
+        reader.join(60_000);
+        return line[0];
+    }
+
     public static void main(String[] args) {
         Check c = new Check("WorkerTest");
 
@@ -71,6 +110,34 @@ public final class WorkerTest {
             Files.writeString(list, "M\t" + calc.resolve("src/Calc.flix") + "\nF\t" + calc.resolve("test/TestCalc.flix") + "\n");
             int code = endedByEof(Protocol.encode("sites", list.toString()) + "\n", true);
             yes(code == 0, "exit code " + code + " (-1: the worker was still running, -2: no answer)");
+        });
+
+        c.test("the worker ends when its stdin closes while a test of the request is still running", () -> {
+            // The first test is fast, so its answer line comes first; the second sleeps 60 s. Ending within 20 s shows
+            // that the end does not wait for the request.
+            Path dir = Files.createTempDirectory("worker-eof-slow");
+            Path testFile = dir.resolve("TestSlow.flix");
+            Files.writeString(testFile, """
+                mod TestSlow {
+                    import java.lang.Thread
+
+                    @Test
+                    def testA(): Unit \\ Assert.Assert = Assert.assertEq(expected = 1, 1)
+
+                    @Test
+                    def testB(): Unit \\ {Assert.Assert, IO} =
+                        Thread.sleep(60000i64);
+                        Assert.assertEq(expected = 1, 1)
+                }
+                """);
+            Path list = dir.resolve("files.list");
+            Files.writeString(list, "F\t" + testFile + "\n");
+            Path marker = dir.resolve("marker.jar");
+            String input = Protocol.encode("load", list.toString(), "0", marker.toString()) + "\n";
+            long t0 = System.nanoTime();
+            int code = endedAfterLine(input, 20);
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+            yes(code == 0, "exit code " + code + " after " + ms + " ms (-1: the worker was still running, -2: no answer line)");
         });
 
         c.finish();
