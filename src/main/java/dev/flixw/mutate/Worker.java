@@ -37,7 +37,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *   given order (all tests in name order without names) and stops at the first failure:
  *   {@code result survived <tests run>} or {@code result killed <test> <description> <tests run>}.
  * <li>{@code baseline [<test>...]}: runs like {@code run 0} with the markers recording: one
- *   {@code covered <test> <switch>...} message per test, then, if the program was loaded with {@code datalog}, one
+ *   {@code covered <test> <switch>...} and one {@code timed <test> <nanoseconds>} message per test, then, if the program was loaded with {@code datalog}, one
  *   {@code dlhit <test> R <rule signature>} or {@code dlhit <test> F <fact text>} message per rule and fact of each
  *   solve of the test, then the result.
  * </ul>
@@ -195,6 +195,7 @@ public final class Worker {
                 DatalogState.clear();
             }
             ran++;
+            long t0 = System.nanoTime();
             try {
                 t.run().run();
             } catch (RuntimeException | Error e) {
@@ -207,6 +208,7 @@ public final class Worker {
                 int i = 1;
                 for (int id : MarkerState.hit()) fields[i++] = String.valueOf(id);
                 out.println(Protocol.encode("covered", fields));
+                out.println(Protocol.encode("timed", t.name(), String.valueOf(System.nanoTime() - t0)));
                 if (datalog) {
                     DatalogState.Solves solves = DatalogState.read();
                     for (String rule : solves.rules()) out.println(Protocol.encode("dlhit", t.name(), "R", rule));

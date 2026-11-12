@@ -25,10 +25,12 @@ public final class SelectionTest {
     static final Path CALC = SiteFinderTest.FIXTURE;
     static final Path WIDE = Path.of(System.getenv("FLIXW_TEST_WIDE")).toAbsolutePath();
 
-    /** Outcome kind with the surviving labels merged, and the killing test: what a full run says about a mutant. */
+    /**
+     * Outcome kind with the surviving labels merged: what a full run says about a mutant. The killing test is not part
+     * of it: the selected run orders the tests ({@link TestOrder}) and ends on the first test that fails in that order.
+     */
     static String verdict(Result r) {
-        Outcome o = r.outcome() == Outcome.NOT_COVERED ? Outcome.SURVIVED : r.outcome();
-        return o + (o == Outcome.KILLED ? " " + r.detail() : "");
+        return (r.outcome() == Outcome.NOT_COVERED ? Outcome.SURVIVED : r.outcome()).toString();
     }
 
     /** One line per mutant that differs between the two reports; empty if they agree. */
