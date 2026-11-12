@@ -45,7 +45,7 @@ final class SolverPatch {
         if (!descriptor.matches("\\(ZL[^;\\[]+;\\)L[^;\\[]+;")) throw new NotAsExpected("descriptor not supported: " + descriptor);
         try {
             return new Editor(classFile).wrap(method, descriptor, hookClass, hookMethod);
-        } catch (java.nio.BufferUnderflowException | IndexOutOfBoundsException e) {
+        } catch (java.nio.BufferUnderflowException | IndexOutOfBoundsException | IllegalArgumentException e) {
             throw new NotAsExpected("not a class file this edit can read: " + e);
         }
     }
@@ -112,6 +112,15 @@ final class SolverPatch {
                 if (nameIs(m, renamed(method))) throw new NotAsExpected("already wrapped: " + renamed(method));
             }
             int methodsEnd = b.position();
+            // the attributes of the class: every byte of the file must belong to the class (a cut or a trailing byte is an error)
+            int classAttributes = u2();
+            for (int i = 0; i < classAttributes; i++) {
+                b.getShort();
+                int len = b.getInt();
+                if (len < 0 || len > b.remaining()) throw new NotAsExpected("class attribute beyond the end of the class");
+                b.position(b.position() + len);
+            }
+            if (b.hasRemaining()) throw new NotAsExpected("bytes after the class attributes");
             if (target == null) throw new NotAsExpected("no method " + method + descriptor);
             if ((target.accessFlags() & 0x0008) == 0) throw new NotAsExpected(method + " is not static");
             return build(target, thisClass, methodsCountOffset, methodsStart, methodsEnd, method, hookClass, hookMethod);
