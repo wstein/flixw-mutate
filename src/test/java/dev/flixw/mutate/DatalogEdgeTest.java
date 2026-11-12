@@ -125,9 +125,12 @@ public final class DatalogEdgeTest {
                     def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.f())
                 }
                 """);
-            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null).withDatalog())) {
+            List<String> lines = new java.util.ArrayList<>();
+            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null, lines::add).withDatalog())) {
                 eq(List.of("TestA.t\t4", "TestA.t\t5"), CoverageSitesTest.reached(s.coverage(), Point.Kind.FACT));
             }
+            // the program has a solver class: no warning
+            eq(List.of(), lines.stream().filter(l -> l.startsWith("warning")).toList());
         });
 
         c.test("a Datalog set that the program never solves: a warning that the solver class is missing, no rule reached", () -> {
