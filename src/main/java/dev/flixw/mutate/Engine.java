@@ -23,7 +23,8 @@ public final class Engine {
      * @param java            the java executable the worker runs with
      * @param workerClasspath class path of the worker: the engine classes and the compiler jar
      * @param timeoutMs       timeout per mutant, or null: ten times the baseline run, at least 2000 ms
-     * @param progress        receives one line per finished mutant
+     * @param progress        receives one line per finished mutant and, with datalog, a line starting with {@code warning:} if the
+     *                        compiled program has no Fixpoint3 solver class although the sources have Datalog rules or facts
      * @param selection       run only the tests that evaluate the mutant's site (false: all tests for every mutant)
      * @param regions         also mark the regions of the code (function entries, branches, lambda bodies) and the lines they own
      *                        in the same program; they are rows of the site table and change no mutant, no outcome and no report line
