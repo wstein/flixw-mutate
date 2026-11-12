@@ -201,7 +201,7 @@ final class CovSites {
                 region(Kind.LAMBDA, file, body, line(FlixApi.call(body, "loc"), false), 0, "");
         }
         if (name.startsWith("TypedAst$Expr$Fixpoint")) return;
-        // The typed AST keeps trait instances in a ListMap, which FlixApi.children does not descend into.
+        // The typed AST keeps trait instances in a ListMap. FlixApi.children descends into it since #32; the spike keeps its own descent.
         if (name.endsWith("ListMap")) {
             visit(FlixApi.call(node, "m"), file);
             return;

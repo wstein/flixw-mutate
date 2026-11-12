@@ -143,7 +143,7 @@ Each was found by a compile error on flix-invaders after the fixture was green; 
 - An `if`/`else` wrapper is not a closed expression after `|>`: `lines |> if (..) .. else { f } |> g` mis-parses. The wrapper has outer parentheses.
 - `(a; b)` is not an expression and `{ -n }` reads as a record restriction: the wrapper uses a block, with an inner parenthesis when the text starts with `-`.
 - A multi-parameter lambda is desugared to nested lambdas with a synthetic location: the region is made at the first body that is not a lambda.
-- `root.instances` is a `ListMap`, which `FlixApi.children` does not descend into: instance defs (`instance ToString[Color]`) were not seen until `CovSites` visited `ListMap.m`. `SiteFinder` walks with `FlixApi.children`, so by reading it skips mutation sites in instance methods too (not run).
+- `root.instances` is a `ListMap`, which is not an `Iterable`: instance defs (`instance ToString[Color]`) were not seen until `CovSites` visited `ListMap.m`. Since #32 `FlixApi.children` also descends into a `ListMap`, so `SiteFinder` finds mutation sites in instance methods; `CovSites` keeps its own descent (the spike code does not depend on the engine class here).
 - Instance defs carry a numeric suffix (`toString$57116`) that changes between runs; the prototype replaces it by `@line`.
 - Default implementations of trait methods are `Sig` nodes, not `Def`: they get no entry region (not measured).
 
