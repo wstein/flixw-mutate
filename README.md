@@ -99,6 +99,15 @@ Limits of the run:
 - Options given twice (`--timeout-ms`, `--no-selection`, `--fail-on-survived`) are an error; `--fail-on-survived`
   counts `not covered` mutants as survivors.
 
+Datalog hits (engine API `Engine.Config.withDatalog()`, no command-line option yet; first step of option 6, no Datalog mutant
+yet): the rules and facts of the constraint sets in `src/` are rows (`RULE`, `FACT`) of the site table, and the baseline run
+records which test's solve contained them (level reached, not fired). The worker compiles a hook module with the program and
+rewrites the compiled `Fixpoint3.Solver.runSolverInternal` (class-file edit, `SolverPatch`) so that every solve of the
+program is recorded; the report adds `datalog sites: ...` and one `not covered` line per rule or fact that no test solved.
+A rule is matched to its source by predicate names, so equal rules in two defs are not told apart (both read as reached,
+unless the test's own def has one); a query over a model (`query m select ...` after `solve`) is not recorded, so its rule
+reads `not covered`. The hook relies on Fixpoint3 internals: checked on Flix 0.79.0 only; lattices are not covered.
+
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog (option 6), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
 `flix.toml` packages. Tested on Flix 0.79.0 only; the compiler is reached by reflection in `FlixApi`.
