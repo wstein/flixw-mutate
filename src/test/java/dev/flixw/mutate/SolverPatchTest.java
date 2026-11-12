@@ -30,6 +30,13 @@ public final class SolverPatchTest {
         /** Another method of the same name: it must keep its name. */
         public static int staticApply(int x) { return x + 1; }
 
+        /** Constants that take two slots of the constant pool. */
+        public static long bigLong() { return 123456789012345L; }
+
+        public static double bigDouble() { return 1.5e300; }
+
+        public static String text() { return "text after the two-slot constants"; }
+
         public static boolean twice(Object o) { return staticApply(true, o) != null && staticApply(false, o) != null; }
     }
 
@@ -92,6 +99,16 @@ public final class SolverPatchTest {
             Class<?> t = patched();
             Method m = t.getMethod("staticApply", boolean.class, Object.class);
             eq(Target.class.getMethod("staticApply", boolean.class, Object.class).getModifiers(), m.getModifiers());
+        });
+
+        c.test("a class with long and double constants is edited correctly (they take two slots of the pool)", () -> {
+            Class<?> t = patched();
+            eq(123456789012345L, t.getMethod("bigLong").invoke(null));
+            eq(1.5e300, t.getMethod("bigDouble").invoke(null));
+            eq("text after the two-slot constants", t.getMethod("text").invoke(null));
+            LOG.clear();
+            eq("result of x", t.getMethod("staticApply", boolean.class, Object.class).invoke(null, true, "x"));
+            eq(List.of("hook x", "orig true x"), LOG);
         });
 
         c.test("a method that is not there, a wrong descriptor and a class that is already wrapped are refused", () -> {
