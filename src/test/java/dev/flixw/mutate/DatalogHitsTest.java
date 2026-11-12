@@ -82,7 +82,7 @@ public final class DatalogHitsTest {
         c.test("the report names the Datalog sites that no test reaches as not covered", () -> {
             Report r = Engine.run(config());
             String text = r.format();
-            yes(text.contains("datalog sites: rules 7, facts 8, not covered 1"), text);
+            yes(text.contains("datalog sites: rules 7, facts 8, not covered 1 (rules 1, facts 0)\n"), text);
             yes(text.contains("not covered src/DlNet.flix:15  rule"), text);
         });
 
