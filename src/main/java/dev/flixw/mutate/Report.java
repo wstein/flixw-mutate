@@ -41,11 +41,36 @@ public record Report(List<Result> results, int skippedSites, int tests, long bas
         sb.append("tests: ").append(tests).append(" (baseline ").append(baselineMs).append(" ms, timeout per mutant ")
             .append(timeoutMs).append(" ms)\n");
         if (!results.isEmpty()) sb.append(selectionLines());
+        sb.append(datalogLines());
         sb.append("mutation score: ");
         if (results.isEmpty()) sb.append("n/a (no mutants)");
         else sb.append(String.format(java.util.Locale.ROOT, "%.1f%% (killed or timed out, of all mutants)", score()));
         sb.append('\n');
         return sb.toString();
+    }
+
+    /**
+     * The lines about Datalog: the rules and facts of the sources and those that no test's solve contained ({@code not
+     * covered}, one line each). Empty if the table has no Datalog rows (the run was not asked for them).
+     */
+    private String datalogLines() {
+        if (coverage == null) return "";
+        int rules = 0;
+        int facts = 0;
+        StringBuilder missing = new StringBuilder();
+        int missingRules = 0;
+        int missingFacts = 0;
+        for (Point p : coverage.sites().points()) {
+            if (p.kind() != Point.Kind.RULE && p.kind() != Point.Kind.FACT) continue;
+            boolean rule = p.kind() == Point.Kind.RULE;
+            if (rule) rules++; else facts++;
+            if (!coverage.hits().testsFor(p.id()).isEmpty()) continue;
+            if (rule) missingRules++; else missingFacts++;
+            missing.append(String.format("%-12s%s:%d  %s%n", "not covered", p.file(), p.line(), rule ? "rule" : "fact"));
+        }
+        if (rules + facts == 0) return "";
+        return "datalog sites: rules " + rules + ", facts " + facts + ", not covered " + (missingRules + missingFacts)
+            + " (rules " + missingRules + ", facts " + missingFacts + ")\n" + missing.toString().replace(System.lineSeparator(), "\n");
     }
 
     /** The lines about test selection: tests per mutant and test executions. */

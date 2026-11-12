@@ -124,14 +124,16 @@ final class Session implements AutoCloseable {
         for (Path p : tests) lines.add("F\t" + p);
         workDir.run(() -> Files.write(sitesList, lines, StandardCharsets.UTF_8));
         startWorker();
-        List<Protocol.Message> reply = ask(
-            config.regions() ? Protocol.encode("sites", sitesList.toString(), "regions") : Protocol.encode("sites", sitesList.toString()),
-            SITES_END, SETUP_TIMEOUT_MS);
+        List<String> request = new ArrayList<>(List.of(sitesList.toString()));
+        if (config.regions()) request.add("regions");
+        if (config.datalog()) request.add("datalog");
+        List<Protocol.Message> reply = ask(Protocol.encode("sites", request.toArray(new String[0])), SITES_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);
         if (!last.verb().equals("done")) throw failed("project does not compile", last);
         Map<String, List<Site>> sites = new TreeMap<>();
         Map<String, List<Region>> regions = new TreeMap<>();
         Map<String, List<Exec>> execs = new TreeMap<>();
+        Map<String, List<DatalogSite>> datalogSites = new TreeMap<>();
         for (Protocol.Message m : reply.subList(0, reply.size() - 1))
             switch (m.verb()) {
                 case "site" -> {
@@ -146,10 +148,14 @@ final class Session implements AutoCloseable {
                     Exec e = Protocol.decodeExec(m);
                     execs.computeIfAbsent(e.file(), k -> new ArrayList<>()).add(e);
                 }
+                case "dlsite" -> {
+                    DatalogSite d = Protocol.decodeDatalogSite(m);
+                    datalogSites.computeIfAbsent(d.file(), k -> new ArrayList<>()).add(d);
+                }
                 default -> { }
             }
         skipped = Integer.parseInt(last.field(0));
-        if (sites.isEmpty()) {
+        if (sites.isEmpty() && datalogSites.isEmpty()) {
             empty = true;
             return;
         }
@@ -162,7 +168,7 @@ final class Session implements AutoCloseable {
             texts.put(p, text);
             inputs.add(new SitePlan.Input(root.relativize(p).toString().replace('\\', '/'), text,
                 sites.getOrDefault(p.toString(), List.of()), regions.getOrDefault(p.toString(), List.of()),
-                execs.getOrDefault(p.toString(), List.of())));
+                execs.getOrDefault(p.toString(), List.of()), datalogSites.getOrDefault(p.toString(), List.of())));
         }
         plan = SitePlan.build(inputs);
         List<String> loadLines = new ArrayList<>();
@@ -197,6 +203,11 @@ final class Session implements AutoCloseable {
         Path module = work.resolve("FlixwMutant.flix");
         workDir.run(() -> Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8));
         loadLines.add("F\t" + module);
+        if (config.datalog()) {
+            Path hook = work.resolve(DatalogHook.FILE);
+            workDir.run(() -> Files.writeString(hook, DatalogHook.source(), StandardCharsets.UTF_8));
+            loadLines.add("F\t" + hook);
+        }
         for (Path p : tests) loadLines.add("F\t" + p);
         markerJar = work.resolve("marker.jar");
         loadList = work.resolve("load.list");
@@ -226,7 +237,7 @@ final class Session implements AutoCloseable {
         if (!base.verb().equals("result")) throw failed("the baseline run failed", base);
         if (base.field(0).equals("killed"))
             throw new Engine.Failure("tests fail without a mutation: " + base.field(1) + ": " + base.field(2));
-        List<Protocol.Message> perTest = reply.subList(0, reply.size() - 1);
+        List<Protocol.Message> perTest = reply.subList(0, reply.size() - 1).stream().filter(m -> m.verb().equals("covered")).toList();
         Hits.Builder hits = new Hits.Builder(siteTable, perTest.stream().map(m -> m.field(0)).toList());
         for (Protocol.Message m : perTest)
             for (String id : m.fields().subList(1, m.fields().size())) {
@@ -235,6 +246,19 @@ final class Session implements AutoCloseable {
                 // a part of a line is reached when the region that owns it is
                 for (int part : plan.lineParts(n)) hits.reach(m.field(0), part);
             }
+        if (config.datalog()) {
+            // what the solves of each test contained, matched to the rule and fact rows of the table
+            Map<String, List<String>> rules = new TreeMap<>();
+            Map<String, List<String>> facts = new TreeMap<>();
+            for (Protocol.Message m : reply)
+                if (m.verb().equals("dlhit"))
+                    (m.field(1).equals("R") ? rules : facts).computeIfAbsent(m.field(0), k -> new ArrayList<>()).add(m.field(2));
+            for (Protocol.Message m : perTest) {
+                String test = m.field(0);
+                for (int id : DatalogMap.reached(plan.datalogSites(), test, rules.getOrDefault(test, List.of()), facts.getOrDefault(test, List.of())))
+                    hits.reach(test, id);
+            }
+        }
         return new Coverage(siteTable, hits.build());
     }
 
@@ -283,7 +307,8 @@ final class Session implements AutoCloseable {
 
     private int load() throws Engine.Failure, IOException {
         List<Protocol.Message> reply = ask(
-            Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString()),
+            config.datalog() ? Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString(), "datalog")
+                : Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString()),
             LOAD_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);
         if (!last.verb().equals("loaded")) throw failed("the schemata program does not compile", last);
