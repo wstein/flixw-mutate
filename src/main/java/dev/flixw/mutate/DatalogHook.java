@@ -14,6 +14,8 @@ package dev.flixw.mutate;
  * with its {@code ToString}, a term that is not a literal as {@code <function>}. A solve whose rules are all
  * {@code $Result} rules is a query over a model: it is not a solve of the program and is not recorded. A query over a
  * constraint set ({@code query p select ...}) has the rules of the set and one {@code $Result} rule: it is recorded.
+ * A solve with no rule at all (a set of facts only) is recorded. A {@code query} directly over a set of facts only has
+ * the {@code $Result} rule alone and cannot be told from a query over a model: it is not recorded.
  * The module names Fixpoint3 internals (checked on Flix 0.79.0 only).
  */
 final class DatalogHook {
@@ -56,7 +58,7 @@ final class DatalogHook {
                 }
 
                 def fwOnlyResult(rules: Vector[Fixpoint3.Ast.Datalog.Constraint]): Bool =
-                    Vector.forAll(match Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _), _) -> name == "$Result", rules)
+                    Vector.length(rules) > 0 and Vector.forAll(match Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _), _) -> name == "$Result", rules)
 
                 def fwText(c: Fixpoint3.Ast.Datalog.Constraint): String = match c {
                     case Fixpoint3.Ast.Datalog.Constraint.Constraint(h, _) => "${fwHead(h)}."
@@ -96,7 +98,7 @@ final class DatalogHook {
                 ///
                 @Test
                 def keepHook(): Unit \\ Assert =
-                    Assert.assertEq(expected = 0, flixwHit(Fixpoint3.Ast.Datalog.Datalog.Datalog(Vector#{}, Vector#{})))
+                    Assert.assertEq(expected = 1, flixwHit(Fixpoint3.Ast.Datalog.Datalog.Datalog(Vector#{}, Vector#{})))
             }
             """;
     }
