@@ -12,6 +12,8 @@ final class CovFormats {
 
     /** Counter-probe: a partly hit line is written as not hit (must fail the format check of run.sh). */
     static final boolean DAP = "dap".equals(System.getProperty("cov.sabotage"));
+    /** Sabotage: Cobertura branch lines write hits=0 for a partly hit line. */
+    static final boolean DAPC = "dapc".equals(System.getProperty("cov.sabotage"));
 
     /** One LCOV record per file; {@code tn} is the test name (may be empty). {@code rel} maps a source name to its report path. */
     static String lcov(CovModel m, BitSet hit, String tn, Map<String, String> rel) {
@@ -76,7 +78,7 @@ final class CovFormats {
                     classes.append(String.format("          <line number=\"%d\" hits=\"%d\" branch=\"false\"/>\n", e.getKey(), e.getValue() == 'M' ? 0 : 1));
                 } else {
                     classes.append(String.format(Locale.ROOT, "          <line number=\"%d\" hits=\"%d\" branch=\"true\" condition-coverage=\"%d%% (%d/%d)\"/>\n",
-                        e.getKey(), e.getValue() == 'M' ? 0 : 1, 100 * bh / b, bh, b));
+                        e.getKey(), e.getValue() == 'M' || (DAPC && e.getValue() == 'P') ? 0 : 1, 100 * bh / b, bh, b));
                 }
             }
             classes.append("        </lines>\n      </class>\n");
