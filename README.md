@@ -106,7 +106,11 @@ rewrites the compiled `Fixpoint3.Solver.runSolverInternal` (class-file edit, `So
 program is recorded; the report adds `datalog sites: ...` and one `not covered` line per rule or fact that no test solved.
 A rule is matched to its source by predicate names, so equal rules in two defs are not told apart (both read as reached,
 unless the test's own def has one); a query over a model (`query m select ...` after `solve`) is not recorded, so its rule
-reads `not covered`, and so is a `query` directly over a set of facts only (it looks like a query over a model). The hook relies on Fixpoint3 internals: checked on Flix 0.79.0 only; lattices are not covered.
+reads `not covered`, and so is a `query` directly over a set of facts only (it looks like a query over a model).
+If the sources have Datalog rules or facts but the compiled program has no solver class (nothing solves them, or another Flix
+version names the class differently), every one reads `not covered` and the engine passes one line starting with `warning:` to
+its progress consumer (standard error in the plugin). The hook relies on Fixpoint3 internals: checked on Flix 0.79.0 only;
+lattices are not covered.
 
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog (option 6), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from

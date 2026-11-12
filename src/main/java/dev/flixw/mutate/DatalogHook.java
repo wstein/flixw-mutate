@@ -53,6 +53,7 @@ final class DatalogHook {
 
                 def fwInput(d: Fixpoint3.Ast.Datalog.Datalog): Option[(Vector[Fixpoint3.Ast.Datalog.Constraint], Vector[Fixpoint3.Ast.Datalog.Constraint])] = match d {
                     case Fixpoint3.Ast.Datalog.Datalog.Datalog(f, r) => Some((f, r))
+                    // a set composed with injected facts (p <+> inject ...) arrives as a join in 0.79.0 (DatalogEdgeTest)
                     case Fixpoint3.Ast.Datalog.Datalog.Join(_, b) => fwInput(b)
                     case _ => None
                 }
