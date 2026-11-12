@@ -51,6 +51,14 @@ public final class SitePlanTest {
             eq(1, p.items(F).size()); // only the mutation site is rewritten
         });
 
+        c.test("at an equal span a Datalog row comes after the mutants", () -> {
+            Span sp = less().whole();
+            DatalogSite fact = new DatalogSite(Point.Kind.FACT, "/p/src/A.flix", sp, 1, "A.f", "B(1)");
+            SitePlan p = SitePlan.build(List.of(new SitePlan.Input(F, SRC, List.of(less()), List.of(), List.of(), List.of(fact))));
+            eq("1 MUTANT 1 " + sp.start() + "-" + sp.end() + "\n" + "2 MUTANT 1 " + sp.start() + "-" + sp.end() + "\n"
+                + "3 FACT 1 " + sp.start() + "-" + sp.end() + "\n", rows(p.table()));
+        });
+
         c.test("a plan without Datalog sites has none", () -> eq(java.util.Map.of(), plan(List.of(less()), List.of(), List.of()).datalogSites()));
 
         c.test("mutants, regions and line parts share one dense id space in the order of file, offset and wider span first", () -> {
