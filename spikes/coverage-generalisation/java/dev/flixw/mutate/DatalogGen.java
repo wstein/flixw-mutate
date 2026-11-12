@@ -197,9 +197,7 @@ public final class DatalogGen {
                     java.util.TreeSet<String> rel = new java.util.TreeSet<>(List.of(s0.rel().split(",")));
                     java.util.TreeSet<String> exp = new java.util.TreeSet<>(List.of(c[2].split(",")));
                     got = s0.rel() + " edb " + s0.edb();
-                    // n/a (edb < 0) is legal only without provenance, where no rule has a derived count either
-                    boolean noProv = s0.rules().stream().allMatch(r -> r.derived() < 0);
-                    ok = rel.equals(exp) && (s0.edb() < 0 ? noProv : s0.edb() == Long.parseLong(c[3]));
+                    ok = rel.equals(exp) && (s0.edb() < 0 ? edbNotAvailable(s0) : s0.edb() == Long.parseLong(c[3]));
                 }
                 if (!ok) { bad++; out.println("DEVIATION relations " + c[0] + " expected solves " + c[1] + " " + c[2] + " edb " + c[3] + ", got " + sv.size() + " " + got); }
             }
@@ -359,6 +357,11 @@ public final class DatalogGen {
 
     static void reset() {
         System.getProperties().keySet().removeIf(k -> k.toString().startsWith("flixw.cov."));
+    }
+
+    /** n/a (edb < 0) is legal only without provenance: the solve has rules and none has a derived count (an empty rule list proves nothing). */
+    static boolean edbNotAvailable(Solve s) {
+        return !s.rules().isEmpty() && s.rules().stream().allMatch(r -> r.derived() < 0);
     }
 
     static List<Solve> read() {
