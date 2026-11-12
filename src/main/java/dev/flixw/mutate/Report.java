@@ -104,7 +104,7 @@ public record Report(List<Result> results, int skippedSites, int tests, long bas
             }
         }
         sb.append("\ntest executions: ").append(executed);
-        if (selection) sb.append(" (a full run: ").append(full).append(", computed)");
+        if (selection) sb.append(" (a full run: at most ").append(full).append(", computed)");
         return sb.append('\n').toString();
     }
 }

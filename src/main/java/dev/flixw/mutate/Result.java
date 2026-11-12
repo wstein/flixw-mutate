@@ -6,8 +6,9 @@ package dev.flixw.mutate;
  * mutant and is empty otherwise. {@code selected} is the number of tests the mutant was run with,
  * {@code executed} the number of tests that ran (a run stops at the first failure; for a timeout it is not measured and
  * is the number of selected tests, an upper bound), {@code fullExecuted} the
- * number a run of all tests would execute: measured without selection, with selection computed as the
- * position of the killing test, or all tests for a mutant that survives (for a timeout, all tests).
+ * number a run of all tests would execute: measured without selection; with selection computed as the position of
+ * the killing test in name order, which is an upper bound (the selected tests run in another order, and a test
+ * before the killer in name order may fail too), or all tests for a mutant that survives (for a timeout, all tests).
  */
 public record Result(Mutant mutant, String file, String position, Outcome outcome, String detail,
                      int selected, int executed, int fullExecuted) {
