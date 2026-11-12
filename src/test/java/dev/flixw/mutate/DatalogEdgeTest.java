@@ -108,6 +108,54 @@ public final class DatalogEdgeTest {
             }
         });
 
+        c.test("a solve of a set of facts only is recorded: its facts are reached", () -> {
+            Path p = EngineTest.project("""
+                mod A {
+                    pub def f(): Int32 =
+                        let p = #{
+                            F(1).
+                            F(2).
+                        };
+                        let m = solve p;
+                        Vector.length(query m select x from F(x))
+                }
+                """, """
+                mod TestA {
+                    @Test
+                    def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.f())
+                }
+                """);
+            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null).withDatalog())) {
+                eq(List.of("TestA.t\t4", "TestA.t\t5"), CoverageSitesTest.reached(s.coverage(), Point.Kind.FACT));
+            }
+        });
+
+        c.test("a Datalog set that the program never solves: a warning that the solver class is missing, no rule reached", () -> {
+            Path p = EngineTest.project("""
+                mod A {
+                    pub def unused(): Vector[Int32] =
+                        let p = #{
+                            N(1).
+                            R(x) :- N(x).
+                        };
+                        query p select x from R(x)
+
+                    pub def f(x: Int32): Int32 = x + 1
+                }
+                """, """
+                mod TestA {
+                    @Test
+                    def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.f(1))
+                }
+                """);
+            List<String> lines = new java.util.ArrayList<>();
+            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null, lines::add).withDatalog())) {
+                eq(List.of(), CoverageSitesTest.reached(s.coverage(), Point.Kind.RULE, Point.Kind.FACT));
+                yes(s.coverage().sites().points().stream().anyMatch(pt -> pt.kind() == Point.Kind.RULE), "no rule row");
+            }
+            yes(lines.stream().anyMatch(l -> l.startsWith("warning: datalog: ") && l.contains("solver")), "no warning in " + lines);
+        });
+
         c.finish();
     }
 }
