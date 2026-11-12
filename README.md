@@ -81,8 +81,9 @@ the same run that the test killed, smoothed as `(kills + 1) / (runs + 2)`; nothi
 changes when a killed mutant ends and which failing test the report names, not the outcome. A mutant that no test
 evaluates is `not covered` (survived without a run). `--no-selection` runs every test for every mutant, for
 comparison. The report lists every mutant as `killed`, `survived`, `not covered` or `timeout`, the tests per
-mutant (mean, median, maximum) and the test executions against those of a full run (computed from the position
-of the killing test; for a timeout the executions are not measured and counted as all selected tests, an upper bound), and the score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
+mutant (mean, median, maximum) and the test executions against those of a full run (`at most`: computed from the position
+in name order of the killing test, an upper bound because the selected tests run in another order and a test before
+the killer may fail too; for a timeout the executions are not measured and counted as all selected tests, an upper bound), and the score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
 baseline run, at least 2000 ms) ends the worker; the next one loads the program again.
 
 Exit codes: 0 report written, 1 survivors with `--fail-on-survived`, 2 the project does not compile, its tests
