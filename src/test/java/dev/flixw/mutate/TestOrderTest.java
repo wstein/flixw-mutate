@@ -47,6 +47,14 @@ public final class TestOrderTest {
             eq(List.of("slow", "fast"), o.order(List.of("slow", "fast")));
         });
 
+        c.test("a test without a duration counts as the floor, not as free and not as endless", () -> {
+            TestOrder o = new TestOrder(Map.of("known", 100 * MS));
+            eq(List.of("unknown", "known"), o.order(List.of("known", "unknown")));
+            eq(List.of("unknown", "known"), o.order(List.of("unknown", "known")));
+            TestOrder p = new TestOrder(Map.of("known", 2 * MS));
+            eq(List.of("known", "unknown"), p.order(List.of("known", "unknown")));
+        });
+
         c.test("the order is a permutation of the input and the input is not changed", () -> {
             List<String> in = List.of("c", "a", "b");
             TestOrder o = new TestOrder(Map.of("a", 50 * MS));

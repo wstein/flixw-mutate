@@ -72,6 +72,25 @@ public final class SelectionTest {
         return pairs;
     }
 
+    /**
+     * The killing test of a killed mutant in the ordered run is a selected test and fails alone under the mutant (the
+     * name of a killer may differ from the full run's, but never be invented). Returns the number of killed mutants.
+     */
+    static int probeKillers(Path root, List<String> failures) throws Exception {
+        int killed = 0;
+        try (Session s = Session.open(config(root))) {
+            for (Mutant m : s.mutants()) {
+                Result r = s.run(m);
+                if (r.outcome() != Outcome.KILLED) continue;
+                killed++;
+                String test = r.detail().substring(0, r.detail().indexOf(": "));
+                if (!s.coverage().testsFor(m.id()).contains(test)) failures.add("mutant " + m.id() + ": " + test + " is not selected");
+                else if (s.run(m, List.of(test), true).outcome() != Outcome.KILLED) failures.add("mutant " + m.id() + ": " + test + " does not fail alone");
+            }
+        }
+        return killed;
+    }
+
     /** A Marker that never records, in a class directory that goes first on the worker class path. */
     static Path saboteur() throws Exception {
         Path dir = Files.createTempDirectory("sabotage");
@@ -147,6 +166,13 @@ public final class SelectionTest {
             int pairs = probeUnselected(WIDE, failures);
             eq(List.of(), failures);
             eq(1108, pairs);
+        });
+
+        c.test("the killing test of the ordered run is a selected test that fails alone (calc, instances, wide)", () -> {
+            List<String> failures = new ArrayList<>();
+            int killed = probeKillers(CALC, failures) + probeKillers(SiteFinderTest.INSTANCES, failures) + probeKillers(WIDE, failures);
+            eq(List.of(), failures);
+            yes(killed > 50, "killed " + killed);
         });
 
         c.test("the sites a test evaluates do not depend on the test order (fresh program, reverse order)", () -> {

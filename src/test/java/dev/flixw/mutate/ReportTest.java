@@ -43,7 +43,7 @@ public final class ReportTest {
             eq("mutants: 5 (killed 2, survived 1, not covered 1, timeout 1); sites left out: 2", lines.get(6));
             eq("tests: 5 (baseline 1200 ms, timeout per mutant 12000 ms)", lines.get(7));
             eq("test selection: on; tests per mutant: mean 1.4, median 1, max 3 (0: 1, 1: 2, 2: 1, 3: 1)", lines.get(8));
-            eq("test executions: 6 (a full run: 20, computed)", lines.get(9));
+            eq("test executions: 6 (a full run: at most 20, computed)", lines.get(9));
             eq("mutation score: 60.0% (killed or timed out, of all mutants)", lines.get(10));
             eq(11, lines.size());
         });
