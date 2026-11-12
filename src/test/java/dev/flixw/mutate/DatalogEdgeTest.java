@@ -102,9 +102,35 @@ public final class DatalogEdgeTest {
 
         c.test("a program that never solves has no solver class: the run works and reaches nothing", () -> {
             Path p = EngineTest.project("mod A { pub def f(x: Int32): Int32 = x + 1 }\n", "mod TestA { use Assert.assertEq;\n @Test def t(): Unit \\ Assert = assertEq(expected = 2, A.f(1)) }\n");
-            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null).withDatalog())) {
+            List<String> lines = new java.util.ArrayList<>();
+            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null, lines::add).withDatalog())) {
                 eq(1, s.mutants().size());
                 for (Point pt : s.coverage().sites().points()) yes(pt.kind() == Point.Kind.MUTANT, "row " + pt);
+            }
+            // the sources have no Datalog site: there is nothing to warn about
+            eq(List.of(), lines.stream().filter(l -> l.startsWith("warning")).toList());
+        });
+
+        c.test("a set composed with injected facts reaches the solver as a join and is recorded", () -> {
+            Path p = EngineTest.project("""
+                mod A {
+                    pub def two(ns: List[Int32]): Int32 =
+                        let p = #{
+                            R(x) :- N(x).
+                        };
+                        let q = inject ns into N/1;
+                        let m = solve (p <+> q);
+                        Vector.length(query m select x from R(x))
+                }
+                """, """
+                mod TestA {
+                    @Test
+                    def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.two(1 :: 2 :: Nil))
+                }
+                """);
+            try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null).withDatalog())) {
+                // the rule at line 4; the query over the model (line 8) is not a solve of the program
+                eq(List.of("TestA.t\t4"), CoverageSitesTest.reached(s.coverage(), Point.Kind.RULE, Point.Kind.FACT));
             }
         });
 
@@ -155,8 +181,10 @@ public final class DatalogEdgeTest {
             try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null, lines::add).withDatalog())) {
                 eq(List.of(), CoverageSitesTest.reached(s.coverage(), Point.Kind.RULE, Point.Kind.FACT));
                 yes(s.coverage().sites().points().stream().anyMatch(pt -> pt.kind() == Point.Kind.RULE), "no rule row");
+                // a second load (a new worker program, as after a timeout) does not warn again
+                s.freshBaseline(s.coverage().tests());
             }
-            yes(lines.stream().anyMatch(l -> l.startsWith("warning: datalog: ") && l.contains("solver")), "no warning in " + lines);
+            eq(1L, lines.stream().filter(l -> l.startsWith("warning: datalog: ") && l.contains("solver")).count());
         });
 
         c.finish();
