@@ -9,13 +9,15 @@ import java.util.List;
 
 /**
  * The order of the selected tests of a mutant, end to end: tests that ran fast and tests that killed earlier mutants
- * of the same run go first, so a killed mutant ends earlier. The outcome of every mutant stays that of the full run.
+ * of the same run go first, so a killed mutant ends earlier. Without a hanging test the outcome of every mutant is that of
+ * the full run; a mutant that one test fails and another hangs on is killed or timed out by whichever runs first.
  */
 public final class OrderTest {
     static final Path FIXTURES = Path.of(System.getenv("FLIXW_TEST_FIXTURES")).toAbsolutePath();
     static final Path ORDER = FIXTURES.resolve("order");
     static final Path LEARN = FIXTURES.resolve("order-learn");
     static final Path TWO = FIXTURES.resolve("order-two");
+    static final Path FLIP = FIXTURES.resolve("order-flip");
 
     static Engine.Config config(Path root) { return new Engine.Config(root, EngineTest.JAVA, EngineTest.CP, null); }
 
@@ -55,10 +57,38 @@ public final class OrderTest {
             eq(outcomes(full), outcomes(selected));
             eq(4, selected.results().size());
             List<Integer> executed = selected.results().stream().map(Result::executed).toList();
-            // The first mutant has no history: name order, or the duration if a weak test is slow (all three tests are
-            // trivial, so a slow first call decides). After it the killer goes first; one miss is allowed for timer noise.
-            yes(executed.get(0) >= 2, executed.toString());
-            yes(executed.subList(1, 4).stream().mapToInt(Integer::intValue).sum() <= 4, executed.toString());
+            // After the first mutant the killer goes first (the exact order is checked against a model below).
+            yes(executed.subList(1, 4).contains(1), executed.toString());
+        });
+
+        c.test("the run follows a model of the order: durations of the baseline, history of the earlier mutants", () -> {
+            for (Path root : List.of(LEARN, ORDER, TWO)) {
+                try (Session s = Session.open(config(root))) {
+                    TestOrder model = new TestOrder(s.testNanos());
+                    for (Mutant m : s.mutants()) {
+                        List<String> sent = model.order(s.coverage().testsFor(m.id()));
+                        Result r = s.run(m);
+                        int expected = r.outcome() == Outcome.KILLED
+                            ? sent.indexOf(r.detail().substring(0, r.detail().indexOf(": "))) + 1 : sent.size();
+                        eq(expected, r.executed());
+                        model.record(sent, r);
+                    }
+                }
+            }
+        });
+
+        c.test("flip: a slow test hangs and a fast test fails under every mutant: the full run times out, the ordered run kills", () -> {
+            Engine.Config base = new Engine.Config(FLIP, EngineTest.JAVA, EngineTest.CP, 2000L);
+            Report full = Engine.run(base.withoutSelection());
+            Report ordered = Engine.run(base);
+            Report unordered = Engine.run(base.withoutOrder());
+            yes(!full.results().isEmpty(), "no mutants");
+            eq(full.results().size(), full.count(Outcome.TIMEOUT));
+            eq(ordered.results().size(), ordered.count(Outcome.KILLED));
+            // Switched off, the outcome of every mutant is that of the full run.
+            eq(outcomes(full), outcomes(unordered));
+            // Killed and timed out count alike in the score.
+            eq(full.score(), ordered.score());
         });
 
         c.test("two: the computed full run is an upper bound of the measured one and the report says so", () -> {

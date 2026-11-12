@@ -1,6 +1,7 @@
 package dev.flixw.mutate;
 
 import static dev.flixw.mutate.Check.eq;
+import static dev.flixw.mutate.Check.throwsA;
 import static dev.flixw.mutate.Check.yes;
 
 import java.nio.file.Files;
@@ -73,6 +74,12 @@ public final class SessionTest {
                 "the worker start was not refused by the work directory: " + refusal);
             eq(false, s.workerAlive());
             eq(false, Files.exists(work));
+        });
+
+        c.test("a timed line with a missing or malformed duration is an Engine.Failure, not a crash", () -> {
+            eq(42L, Session.parseNanos(Protocol.decode(Protocol.encode("timed", "t", "42"))));
+            throwsA(Engine.Failure.class, () -> Session.parseNanos(Protocol.decode(Protocol.encode("timed", "t", "abc"))));
+            throwsA(Engine.Failure.class, () -> Session.parseNanos(Protocol.decode(Protocol.encode("timed", "t"))));
         });
 
         c.finish();
