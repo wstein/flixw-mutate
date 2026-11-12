@@ -13,7 +13,9 @@ import java.util.stream.Stream;
 
 /**
  * One prepared run of the engine: the sites are picked, the schemata program is rendered, compiled and loaded
- * in a worker JVM, and the baseline run has recorded which test evaluates which site. It runs mutants and
+ * in a worker JVM, and the baseline run has recorded which test evaluates which site. With regions on, the
+ * program also carries a marker for every region of the code (function entries, branches, lambda bodies), numbered
+ * with the mutants in one table ({@link SitePlan}). It runs mutants and
  * owns the work directory and the worker. A mutant that runs into the timeout ends the worker (nothing else
  * stops a runaway test); the next worker loads the program again.
  */
@@ -44,6 +46,8 @@ final class Session implements AutoCloseable {
     private long timeout;
     private Coverage coverage;
     private SiteTable siteTable;
+    private SitePlan plan;
+    private int skippedRegions;
     private List<String> testNames = List.of();
     private boolean empty;
 
@@ -68,6 +72,9 @@ final class Session implements AutoCloseable {
     String position(Mutant m) { return positions.get(m.id()); }
 
     int skippedSites() { return skipped; }
+
+    /** Regions left out: the worker's guards and the regions that overlap a site badly (0 without regions). */
+    int skippedRegions() { return skippedRegions; }
 
     int testCount() { return testCount; }
 
@@ -121,14 +128,30 @@ final class Session implements AutoCloseable {
         for (Path p : tests) lines.add("F\t" + p);
         workDir.run(() -> Files.write(sitesList, lines, StandardCharsets.UTF_8));
         startWorker();
-        List<Protocol.Message> reply = ask(Protocol.encode("sites", sitesList.toString()), SITES_END, SETUP_TIMEOUT_MS);
+        List<Protocol.Message> reply = ask(
+            config.regions() ? Protocol.encode("sites", sitesList.toString(), "regions") : Protocol.encode("sites", sitesList.toString()),
+            SITES_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);
         if (!last.verb().equals("done")) throw failed("project does not compile", last);
         Map<String, List<Site>> sites = new TreeMap<>();
+        Map<String, List<Region>> regions = new TreeMap<>();
+        Map<String, List<Exec>> execs = new TreeMap<>();
         for (Protocol.Message m : reply.subList(0, reply.size() - 1))
-            if (m.verb().equals("site")) {
-                Site s = Protocol.decodeSite(m);
-                sites.computeIfAbsent(s.file(), k -> new ArrayList<>()).add(s);
+            switch (m.verb()) {
+                case "site" -> {
+                    Site s = Protocol.decodeSite(m);
+                    sites.computeIfAbsent(s.file(), k -> new ArrayList<>()).add(s);
+                }
+                case "region" -> {
+                    Region g = Protocol.decodeRegion(m);
+                    regions.computeIfAbsent(g.file(), k -> new ArrayList<>()).add(g);
+                }
+                case "exec" -> {
+                    Exec e = Protocol.decodeExec(m);
+                    execs.computeIfAbsent(e.file(), k -> new ArrayList<>()).add(e);
+                }
+                case "regions-left-out" -> skippedRegions += Integer.parseInt(m.field(0));
+                default -> { }
             }
         skipped = Integer.parseInt(last.field(0));
         if (sites.isEmpty()) {
@@ -136,17 +159,29 @@ final class Session implements AutoCloseable {
             return;
         }
 
-        // 2. The schemata program.
+        // 2. The numbering of all sites, then the schemata program.
+        List<SitePlan.Input> inputs = new ArrayList<>();
+        Map<Path, String> texts = new java.util.HashMap<>();
+        for (Path p : src) {
+            String text = Files.readString(p, StandardCharsets.UTF_8);
+            texts.put(p, text);
+            inputs.add(new SitePlan.Input(root.relativize(p).toString().replace('\\', '/'), text,
+                sites.getOrDefault(p.toString(), List.of()), regions.getOrDefault(p.toString(), List.of()),
+                execs.getOrDefault(p.toString(), List.of())));
+        }
+        plan = SitePlan.build(inputs);
+        skippedRegions += plan.skippedRegions();
         List<String> loadLines = new ArrayList<>();
         Path rendered = work.resolve("rendered");
         for (Path p : src) {
-            String text = Files.readString(p, StandardCharsets.UTF_8);
-            List<Site> list = sites.getOrDefault(p.toString(), List.of());
+            String text = texts.get(p);
+            String rel = root.relativize(p).toString().replace('\\', '/');
+            List<Schemata.Item> list = plan.items(rel);
             Path target = p;
             if (!list.isEmpty()) {
                 Schemata.Rendered r;
                 try {
-                    r = Schemata.render(text, list, mutants.size() + 1);
+                    r = Schemata.render(text, list);
                 } catch (IllegalArgumentException e) {
                     throw new Engine.Failure("cannot rewrite " + root.relativize(p) + ": " + e.getMessage());
                 }
@@ -159,12 +194,12 @@ final class Session implements AutoCloseable {
                 for (Mutant m : r.mutants()) {
                     mutants.add(m);
                     positions.put(m.id(), Schemata.position(text, m.site().whole().start()));
-                    files.put(m.id(), root.relativize(p).toString().replace('\\', '/'));
+                    files.put(m.id(), rel);
                 }
             }
             loadLines.add("F\t" + target);
         }
-        siteTable = mutantTable();
+        siteTable = plan.table();
         Path module = work.resolve("FlixwMutant.flix");
         workDir.run(() -> Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8));
         loadLines.add("F\t" + module);
@@ -186,15 +221,6 @@ final class Session implements AutoCloseable {
 
     // --- runs ------------------------------------------------------------------------------------------------
 
-    /** The mutants as rows of the site table: the switch number is the id (file, then offset order of the render). */
-    private SiteTable mutantTable() {
-        List<Point> points = new ArrayList<>();
-        for (Mutant m : mutants)
-            points.add(new Point(m.id(), Point.Kind.MUTANT, file(m), Integer.parseInt(position(m).substring(0, position(m).indexOf(':'))),
-                m.site().whole()));
-        return SiteTable.of(points);
-    }
-
     /**
      * Runs the baseline in the order given (name order for an empty list) on the loaded program and returns
      * which switches each test evaluated.
@@ -209,7 +235,12 @@ final class Session implements AutoCloseable {
         List<Protocol.Message> perTest = reply.subList(0, reply.size() - 1);
         Hits.Builder hits = new Hits.Builder(siteTable, perTest.stream().map(m -> m.field(0)).toList());
         for (Protocol.Message m : perTest)
-            for (String id : m.fields().subList(1, m.fields().size())) hits.reach(m.field(0), Integer.parseInt(id));
+            for (String id : m.fields().subList(1, m.fields().size())) {
+                int n = Integer.parseInt(id);
+                hits.reach(m.field(0), n);
+                // a part of a line is reached when the region that owns it is
+                for (int part : plan.lineParts(n)) hits.reach(m.field(0), part);
+            }
         return new Coverage(siteTable, hits.build());
     }
 
@@ -258,7 +289,7 @@ final class Session implements AutoCloseable {
 
     private int load() throws Engine.Failure, IOException {
         List<Protocol.Message> reply = ask(
-            Protocol.encode("load", loadList.toString(), String.valueOf(mutants.size()), markerJar.toString()),
+            Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString()),
             LOAD_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);
         if (!last.verb().equals("loaded")) throw failed("the schemata program does not compile", last);

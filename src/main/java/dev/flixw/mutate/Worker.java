@@ -23,11 +23,13 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  * <p>Requests (tab-separated, see {@link Protocol}):
  * <ul>
- * <li>{@code sites <listfile>}: type-checks the files of the list and answers one {@code site} message per
- *   site and {@code done <left out>}; {@code compile-error <message>...} if the program does not compile.
- * <li>{@code load <listfile> <mutants> <markerjar>}: compiles and loads the program with the marker jar
- *   (written there if it does not exist; the switches are 1 to {@code mutants}); {@code loaded <tests>} or
- *   {@code compile-error}.
+ * <li>{@code sites <listfile> [regions]}: type-checks the files of the list and answers one {@code site} message per
+ *   site and {@code done <left out>}; {@code compile-error <message>...} if the program does not compile. With
+ *   {@code regions} it also answers one {@code region} message per coverage region and one {@code exec} message per
+ *   expression start of the {@code M} files, and {@code regions-left-out <n>}, before {@code done}.
+ * <li>{@code load <listfile> <switches> <markerjar>}: compiles and loads the program with the marker jar
+ *   (written there if it does not exist; the switches are 1 to {@code switches}: the ids of the mutants and of the
+ *   regions); {@code loaded <tests>} or {@code compile-error}.
  * <li>{@code run <n> [<test>...]}: sets the switch to mutant {@code n} (0: none), runs the named tests in the
  *   given order (all tests in name order without names) and stops at the first failure:
  *   {@code result survived <tests run>} or {@code result killed <test> <description> <tests run>}.
@@ -75,7 +77,7 @@ public final class Worker {
 
     private void handle(Protocol.Message m) throws IOException {
         switch (m.verb()) {
-            case "sites" -> sites(readList(Path.of(m.field(0))));
+            case "sites" -> sites(readList(Path.of(m.field(0))), m.fields().size() > 1 && m.field(1).equals("regions"));
             case "load" -> load(readList(Path.of(m.field(0))), Integer.parseInt(m.field(1)), Path.of(m.field(2)));
             case "run" -> run(Integer.parseInt(m.field(0)), m.fields().subList(1, m.fields().size()));
             case "baseline" -> baseline(m.fields());
@@ -94,7 +96,7 @@ public final class Worker {
         return files;
     }
 
-    private void sites(Map<Path, Boolean> files) throws IOException {
+    private void sites(Map<Path, Boolean> files, boolean regions) throws IOException {
         FlixApi.Checked checked = api.check(new ArrayList<>(files.keySet()));
         if (checked.failure() != null) {
             compileError(checked.failure());
@@ -105,12 +107,18 @@ public final class Worker {
             if (e.getValue()) mutable.put(e.getKey().toString(), Files.readString(e.getKey(), StandardCharsets.UTF_8));
         SiteFinder.Result r = SiteFinder.find(api, checked.root(), mutable);
         for (List<Site> list : r.sites().values()) for (Site s : list) out.println(Protocol.encodeSite(s));
+        if (regions) {
+            RegionFinder.Result found = RegionFinder.find(api, checked.root(), mutable);
+            for (Region g : found.regions()) out.println(Protocol.encodeRegion(g));
+            for (Exec e : found.execs()) out.println(Protocol.encodeExec(e));
+            out.println(Protocol.encode("regions-left-out", String.valueOf(found.skipped())));
+        }
         out.println(Protocol.encode("done", String.valueOf(r.skipped())));
     }
 
-    private void load(Map<Path, Boolean> files, int mutants, Path markerJar) throws IOException {
+    private void load(Map<Path, Boolean> files, int switches, Path markerJar) throws IOException {
         if (!Files.exists(markerJar)) MarkerJar.write(markerJar);
-        MarkerState.publish(mutants);
+        MarkerState.publish(switches);
         MarkerState.set(0, false);
         Object r = api.compileAndLoad(new ArrayList<>(files.keySet()), List.of(markerJar));
         if (r instanceof FlixApi.Failure f) {
