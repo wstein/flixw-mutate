@@ -9,7 +9,8 @@ import java.lang.reflect.Method;
  * the solver. The class goes into the marker jar next to {@link Marker}, because generated code finds Java classes
  * outside the JDK only through such a jar. The compiled hook function {@code FlixwDatalog.flixwHit} (see
  * {@link DatalogHook}) exists only in the program's own class loader, so {@code before} finds it through the class
- * loader of the value it gets, and runs the trampolined result of the compiled function to its value.
+ * loader of the value it gets, and runs the trampolined result of the compiled function to its value. It does
+ * nothing unless hits are recorded (the baseline run).
  */
 public final class Splice {
     static final String HOOK_CLASS = "FlixwDatalog.Def$flixwHit";
@@ -17,6 +18,9 @@ public final class Splice {
     private Splice() { }
 
     public static void before(Object datalog) throws Exception {
+        // The hook records for the baseline run only; in the runs of the mutants it would write system properties
+        // that nobody reads or clears (the state array is the one of Marker, published by the worker).
+        if (!(System.getProperties().get(MarkerState.STATE_KEY) instanceof int[] state) || state[1] == 0) return;
         Class<?> hook;
         try {
             hook = datalog.getClass().getClassLoader().loadClass(HOOK_CLASS);
