@@ -24,8 +24,10 @@ sh scripts/package.sh 0.1.0
 `scripts/check-sdk-source.sh` runs first and fails on a wrong HEAD, a missing path, tracked,
 untracked or ignored changes under `kit/src` and `kit/resources`, or consumed bytes that differ
 from the pinned Git blobs. There is no download or sibling-checkout fallback; CI checks out the
-same revision. Only `kit/src` and `kit/resources` enter `dist/plugin.jar`, with
-`META-INF/LICENSE-flixw-plugin-sdk` and this repository's `LICENSE` as `META-INF/LICENSE`; no SDK JAR is needed at run time. The pin names a commit
+same revision. `dist/plugin.jar` holds the classes of `kit/src` and of this repository's
+`src/main/java`, the files of `kit/resources`, the pin as `dev/flixw/plugin/sdk-source.properties`
+and this repository's `LICENSE` as `META-INF/LICENSE` (`package.sh` stops if `kit/resources`
+already has that file); no SDK JAR is needed at run time. The pin names a commit
 because the SDK has no release asset yet. Replacing it with a versioned release asset and its
 SHA-256 is a separate step.
 
