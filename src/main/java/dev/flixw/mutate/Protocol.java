@@ -61,6 +61,16 @@ final class Protocol {
         return new Exec(m.field(0), Integer.parseInt(m.field(1)), Integer.parseInt(m.field(2)));
     }
 
+    static String encodeDatalogSite(DatalogSite d) {
+        return encode("dlsite", d.kind().name(), d.file(), String.valueOf(d.span().start()), String.valueOf(d.span().end()),
+            String.valueOf(d.line()), d.def(), d.key());
+    }
+
+    static DatalogSite decodeDatalogSite(Message m) {
+        return new DatalogSite(Point.Kind.valueOf(m.field(0)), m.field(1), new Span(Integer.parseInt(m.field(2)), Integer.parseInt(m.field(3))),
+            Integer.parseInt(m.field(4)), m.field(5), m.field(6));
+    }
+
     private static String escape(String s) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < s.length(); i++) {

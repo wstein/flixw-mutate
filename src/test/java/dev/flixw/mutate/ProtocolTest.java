@@ -44,6 +44,18 @@ public final class ProtocolTest {
             eq(e, Protocol.decodeExec(Protocol.decode(Protocol.encodeExec(e))));
         });
 
+        c.test("a Datalog site round-trips, with tabs and backslashes in its key", () -> {
+            DatalogSite d = new DatalogSite(Point.Kind.FACT, "/p/src/A b.flix", new Span(10, 22), 4, "Mod.def", "Name(\"a\\tb\")");
+            eq(d, Protocol.decodeDatalogSite(Protocol.decode(Protocol.encodeDatalogSite(d))));
+            DatalogSite r = new DatalogSite(Point.Kind.RULE, "/p/src/A.flix", new Span(0, 5), 1, "", "$Result<-Even");
+            eq(r, Protocol.decodeDatalogSite(Protocol.decode(Protocol.encodeDatalogSite(r))));
+        });
+
+        c.test("a Datalog site has the kind rule or fact", () -> {
+            throwsA(IllegalArgumentException.class, () -> new DatalogSite(Point.Kind.LINE, "/p/A.flix", new Span(0, 1), 1, "", "k"));
+            throwsA(IllegalArgumentException.class, () -> new DatalogSite(Point.Kind.MUTANT, "/p/A.flix", new Span(0, 1), 1, "", "k"));
+        });
+
         c.test("a point kind that is not a region kind is rejected", () -> {
             throwsA(IllegalArgumentException.class, () -> new Region("/p/A.flix", Point.Kind.MUTANT, new Span(0, 1), 1));
             throwsA(IllegalArgumentException.class, () -> new Region("/p/A.flix", Point.Kind.LINE, new Span(0, 1), 1));
