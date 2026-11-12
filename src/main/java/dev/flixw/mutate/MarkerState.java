@@ -12,13 +12,13 @@ final class MarkerState {
     private MarkerState() { }
 
     /**
-     * Publishes the arrays for switches 1 to {@code mutants}; must run before the generated code loads
+     * Publishes the arrays for switches 1 to {@code switches}; must run before the generated code loads
      * {@link Marker}. An array that is already published and long enough is kept (a loaded program holds it).
      */
-    static void publish(int mutants) {
+    static void publish(int switches) {
         if (!(System.getProperties().get(STATE_KEY) instanceof int[])) System.getProperties().put(STATE_KEY, new int[2]);
         boolean[] hit = hits();
-        if (hit == null || hit.length < mutants + 1) System.getProperties().put(HIT_KEY, new boolean[mutants + 1]);
+        if (hit == null || hit.length < switches + 1) System.getProperties().put(HIT_KEY, new boolean[switches + 1]);
     }
 
     private static int[] state() { return (int[]) System.getProperties().get(STATE_KEY); }

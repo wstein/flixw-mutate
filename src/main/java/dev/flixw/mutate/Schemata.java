@@ -57,13 +57,26 @@ public final class Schemata {
         };
     }
 
-    /** A site with the sites nested in its operands. */
+    /**
+     * One thing to rewrite: a mutation site, whose mutants have the consecutive ids from {@code id}, or a region
+     * marker, whose id is {@code id}. A region wraps the text of its span, and anything may nest inside it.
+     */
+    public record Item(Site site, Span span, int id) {
+        public static Item ofSite(Site site, int firstId) { return new Item(site, site.whole(), firstId); }
+
+        public static Item ofRegion(Span span, int id) { return new Item(null, span, id); }
+    }
+
+    /** An item with the items nested in it. */
     private static final class Node {
-        final Site site;
-        int id;
+        final Item item;
         final List<Node> kids = new ArrayList<>();
 
-        Node(Site site) { this.site = site; }
+        Node(Item item) { this.item = item; }
+
+        Site site() { return item.site(); }
+
+        Span whole() { return item.span(); }
     }
 
     /**
@@ -71,34 +84,56 @@ public final class Schemata {
      * (partial overlap, a site in the operator text) is an {@link IllegalArgumentException}.
      */
     public static Rendered render(String source, List<Site> sites, int firstId) {
-        List<Node> sorted = new ArrayList<>();
-        for (Site s : sites) {
-            if (s.whole().end() > source.length()) throw new IllegalArgumentException("site beyond the end of the text");
-            sorted.add(new Node(s));
+        List<Site> sorted = new ArrayList<>(sites);
+        sorted.sort(Comparator.<Site>comparingInt(s -> s.whole().start()).thenComparing(s -> -s.whole().end()));
+        List<Item> items = new ArrayList<>();
+        int next = firstId;
+        for (Site s : sorted) {
+            items.add(Item.ofSite(s, next));
+            next += s.kind().mutations().size();
         }
-        sorted.sort(Comparator.<Node>comparingInt(n -> n.site.whole().start())
-            .thenComparing(n -> -n.site.whole().end()));
+        return render(source, items);
+    }
+
+    /**
+     * Rewrites {@code source}: the sites become calls into the switch module, the regions are wrapped in
+     * {@code (if (FlixwMutant.on(id)) bug!("flixw-cov") else { ... })}. Region markers are never the active switch
+     * (the ids of the mutants are other ids), so the program means what it meant. The items nest by their spans; where
+     * two spans are equal the item that comes first in the list is the outer one. A site nests only inside the
+     * operands of another site, a region inside anything; other overlap is an {@link IllegalArgumentException}.
+     */
+    public static Rendered render(String source, List<Item> items) {
+        List<Node> sorted = new ArrayList<>();
+        for (Item i : items) {
+            if (i.span().end() > source.length()) throw new IllegalArgumentException("site beyond the end of the text");
+            sorted.add(new Node(i));
+        }
+        sorted.sort(Comparator.<Node>comparingInt(n -> n.whole().start()).thenComparing(n -> -n.whole().end()));
         List<Node> roots = new ArrayList<>();
         List<Node> open = new ArrayList<>();
         List<Mutant> mutants = new ArrayList<>();
-        int next = firstId;
         for (Node n : sorted) {
-            Span w = n.site.whole();
-            while (!open.isEmpty() && open.get(open.size() - 1).site.whole().end() <= w.start()) open.remove(open.size() - 1);
+            Span w = n.whole();
+            while (!open.isEmpty() && open.get(open.size() - 1).whole().end() <= w.start()) open.remove(open.size() - 1);
             if (open.isEmpty()) {
                 roots.add(n);
             } else {
                 Node parent = open.get(open.size() - 1);
-                if (!parent.site.whole().contains(w)) throw new IllegalArgumentException("sites overlap: " + parent.site + " and " + n.site);
-                if (!inOperand(parent.site, w)) throw new IllegalArgumentException("site outside the operands of " + parent.site);
+                if (!parent.whole().contains(w)) throw new IllegalArgumentException("sites overlap: " + describe(parent) + " and " + describe(n));
+                if (parent.site() != null && !inOperand(parent.site(), w))
+                    throw new IllegalArgumentException("site outside the operands of " + parent.site());
                 parent.kids.add(n);
             }
             open.add(n);
-            n.id = next;
-            for (String to : n.site.kind().mutations()) mutants.add(new Mutant(next++, n.site, n.site.kind().operator(), to));
+            if (n.site() != null) {
+                int id = n.item.id();
+                for (String to : n.site().kind().mutations()) mutants.add(new Mutant(id++, n.site(), n.site().kind().operator(), to));
+            }
         }
         return new Rendered(slice(source, 0, source.length(), roots), mutants);
     }
+
+    private static String describe(Node n) { return n.site() != null ? n.site().toString() : "region " + n.whole(); }
 
     private static boolean inOperand(Site s, Span inner) {
         return s.left().contains(inner) || (s.right() != null && s.right().contains(inner));
@@ -109,9 +144,9 @@ public final class Schemata {
         StringBuilder sb = new StringBuilder();
         int pos = start;
         for (Node n : nodes) {
-            sb.append(source, pos, n.site.whole().start());
+            sb.append(source, pos, n.whole().start());
             sb.append(rewrite(source, n));
-            pos = n.site.whole().end();
+            pos = n.whole().end();
         }
         sb.append(source, pos, end);
         return sb.toString();
@@ -119,14 +154,16 @@ public final class Schemata {
 
     private static String operand(String source, Span span, Node node) {
         List<Node> inside = new ArrayList<>();
-        for (Node k : node.kids) if (span.contains(k.site.whole())) inside.add(k);
+        for (Node k : node.kids) if (span.contains(k.whole())) inside.add(k);
         return slice(source, span.start(), span.end(), inside);
     }
 
     private static String rewrite(String source, Node n) {
-        Site s = n.site;
+        if (n.site() == null) return region(source, n);
+        Site s = n.site();
         SiteKind k = s.kind();
-        String ids = n.id + (k.mutations().size() == 2 ? ", " + (n.id + 1) : "");
+        int id = n.item.id();
+        String ids = id + (k.mutations().size() == 2 ? ", " + (id + 1) : "");
         String head = "(FlixwMutant." + k.helper() + "(" + ids + ", ";
         return switch (k.shape()) {
             case COMPARE, ARITHMETIC ->
@@ -135,6 +172,18 @@ public final class Schemata {
                 head + "(" + operand(source, s.left(), n) + "), () -> (" + operand(source, s.right(), n) + ")))";
             case NEGATION -> head + operand(source, s.whole(), n) + "))";
         };
+    }
+
+    /**
+     * A region marker: the marker is evaluated first (a panic in the region still counts as reached) and its result is used,
+     * which keeps the optimiser from dropping it. Braces, not parentheses: the expression may be a sequence {@code a; b}. A
+     * leading minus after a brace would read as a record restriction, so that case keeps its own parentheses.
+     */
+    private static String region(String source, Node n) {
+        Span w = n.whole();
+        boolean minus = source.substring(w.start(), w.end()).stripLeading().startsWith("-");
+        return "(if (FlixwMutant.on(" + n.item.id() + ")) bug!(\"flixw-cov\") else { " + (minus ? "(" : "")
+            + operand(source, w, n) + (minus ? ") })" : " })");
     }
 
     /**

@@ -43,6 +43,24 @@ final class Protocol {
             new Span(Integer.parseInt(m.field(4)), Integer.parseInt(m.field(5))), right);
     }
 
+    static String encodeRegion(Region r) {
+        return encode("region", r.file(), r.kind().name(), String.valueOf(r.span().start()), String.valueOf(r.span().end()),
+            String.valueOf(r.line()));
+    }
+
+    static Region decodeRegion(Message m) {
+        return new Region(m.field(0), Point.Kind.valueOf(m.field(1)), new Span(Integer.parseInt(m.field(2)), Integer.parseInt(m.field(3))),
+            Integer.parseInt(m.field(4)));
+    }
+
+    static String encodeExec(Exec e) {
+        return encode("exec", e.file(), String.valueOf(e.offset()), String.valueOf(e.line()));
+    }
+
+    static Exec decodeExec(Message m) {
+        return new Exec(m.field(0), Integer.parseInt(m.field(1)), Integer.parseInt(m.field(2)));
+    }
+
     private static String escape(String s) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < s.length(); i++) {
