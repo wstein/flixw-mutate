@@ -24,6 +24,7 @@ public final class CoverageSitesTest {
     static final Path FIXTURE = SPIKE.resolve("fixture");
     static final Path CALC = SiteFinderTest.FIXTURE;
     static final Path WIDE = SelectionTest.WIDE;
+    static final Path PAIRS = CALC.resolveSibling("pairs");
 
     static Engine.Config config(Path root) { return new Engine.Config(root, EngineTest.JAVA, EngineTest.CP, null); }
 
@@ -138,6 +139,16 @@ public final class CoverageSitesTest {
                 // a test reaches a mutant's site and a region of the same function in the same run
                 Mutant any = s.mutants().get(0);
                 yes(!s.coverage().testsFor(any.id()).isEmpty(), "the first mutant is reached by no test");
+            }
+        });
+
+        c.test("a destructuring let is desugared to a match and gets no branch regions; a written match does", () -> {
+            try (Session s = Session.open(config(PAIRS).withRegions())) {
+                List<String> arms = new ArrayList<>();
+                for (Point p : s.coverage().sites().points()) if (p.kind() == Point.Kind.ARM) arms.add(p.file() + ":" + p.line());
+                eq(List.of("src/Pairs.flix:6", "src/Pairs.flix:6"), arms);
+                eq(List.of("TestPairs.testPickSome", "TestPairs.testSum"), s.coverage().tests());
+                eq(List.of("TestPairs.testPickSome\t6"), Views.reached(s.coverage().sites(), s.coverage().hits(), Point.Kind.ARM).stream().distinct().toList());
             }
         });
 
