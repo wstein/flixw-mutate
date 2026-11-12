@@ -75,7 +75,10 @@ numeric `+ - * /`, `and`, `or` and `not`. Each site becomes a call into a genera
 called through `unsafe IO`); the operands are not duplicated and the right operand of `and`/`or` stays lazy.
 One worker JVM (the project's Java, with the pinned compiler) compiles and loads the rewritten program once.
 A baseline run with every switch off records which test evaluates which site. A mutant is a switch number and a
-rerun of the tests that evaluate its site, which stops at the first failing test; a mutant that no test
+rerun of the tests that evaluate its site, which stops at the first failing test. The tests run by falling
+`p / t`: `t` is the duration in the baseline run (under 5 ms counts as 5 ms), `p` the share of earlier mutants of
+the same run that the test killed, smoothed as `(kills + 1) / (runs + 2)`; nothing is stored between runs. The order
+changes when a killed mutant ends and which failing test the report names, not the outcome. A mutant that no test
 evaluates is `not covered` (survived without a run). `--no-selection` runs every test for every mutant, for
 comparison. The report lists every mutant as `killed`, `survived`, `not covered` or `timeout`, the tests per
 mutant (mean, median, maximum) and the test executions against those of a full run (computed from the position
