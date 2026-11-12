@@ -23,26 +23,33 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  * <p>Requests (tab-separated, see {@link Protocol}):
  * <ul>
- * <li>{@code sites <listfile> [regions]}: type-checks the files of the list and answers one {@code site} message per
+ * <li>{@code sites <listfile> [regions] [datalog]}: type-checks the files of the list and answers one {@code site} message per
  *   site and {@code done <left out>}; {@code compile-error <message>...} if the program does not compile. With
  *   {@code regions} it also answers one {@code region} message per coverage region and one {@code exec} message per
- *   expression start of the {@code M} files, before {@code done}.
- * <li>{@code load <listfile> <switches> <markerjar>}: compiles and loads the program with the marker jar
+ *   expression start of the {@code M} files, before {@code done}. With {@code datalog} it answers one {@code dlsite}
+ *   message per Datalog rule and fact of the {@code M} files, before {@code done}.
+ * <li>{@code load <listfile> <switches> <markerjar> [datalog]}: compiles and loads the program with the marker jar
  *   (written there if it does not exist; the switches are 1 to {@code switches}: the ids of the mutants and of the
- *   regions); {@code loaded <tests>} or {@code compile-error}.
+ *   regions); {@code loaded <tests>} or {@code compile-error}. With {@code datalog} the compiled Fixpoint3 solver
+ *   calls the hook module {@code FlixwDatalog} of the list ({@link DatalogHook}) on every solve.
  * <li>{@code run <n> [<test>...]}: sets the switch to mutant {@code n} (0: none), runs the named tests in the
  *   given order (all tests in name order without names) and stops at the first failure:
  *   {@code result survived <tests run>} or {@code result killed <test> <description> <tests run>}.
  * <li>{@code baseline [<test>...]}: runs like {@code run 0} with the markers recording: one
- *   {@code covered <test> <switch>...} message per test, then the result.
+ *   {@code covered <test> <switch>...} message per test, then, if the program was loaded with {@code datalog}, one
+ *   {@code dlhit <test> R <rule signature>} or {@code dlhit <test> F <fact text>} message per rule and fact of each
+ *   solve of the test, then the result.
  * </ul>
  * A list file has one line per file: {@code M<TAB>path} for a file whose sites are wanted, {@code F<TAB>path}
  * for a file that is only compiled.
  */
 public final class Worker {
+    private static final String DATALOG_MODULE = "FlixwDatalog";
+
     private final FlixApi api;
     private final PrintStream out;
     private List<FlixApi.TestCase> tests = List.of();
+    private boolean datalog;
 
     private Worker(FlixApi api, PrintStream out) {
         this.api = api;
@@ -77,8 +84,9 @@ public final class Worker {
 
     private void handle(Protocol.Message m) throws IOException {
         switch (m.verb()) {
-            case "sites" -> sites(readList(Path.of(m.field(0))), m.fields().size() > 1 && m.field(1).equals("regions"));
-            case "load" -> load(readList(Path.of(m.field(0))), Integer.parseInt(m.field(1)), Path.of(m.field(2)));
+            case "sites" -> sites(readList(Path.of(m.field(0))), m.fields().subList(1, m.fields().size()));
+            case "load" -> load(readList(Path.of(m.field(0))), Integer.parseInt(m.field(1)), Path.of(m.field(2)),
+                m.fields().size() > 3 && m.field(3).equals("datalog"));
             case "run" -> run(Integer.parseInt(m.field(0)), m.fields().subList(1, m.fields().size()));
             case "baseline" -> baseline(m.fields());
             default -> out.println(Protocol.encode("error", "unknown request " + m.verb()));
@@ -96,7 +104,9 @@ public final class Worker {
         return files;
     }
 
-    private void sites(Map<Path, Boolean> files, boolean regions) throws IOException {
+    private void sites(Map<Path, Boolean> files, List<String> flags) throws IOException {
+        boolean regions = flags.contains("regions");
+        boolean datalog = flags.contains("datalog");
         FlixApi.Checked checked = api.check(new ArrayList<>(files.keySet()));
         if (checked.failure() != null) {
             compileError(checked.failure());
@@ -112,19 +122,26 @@ public final class Worker {
             for (Region g : found.regions()) out.println(Protocol.encodeRegion(g));
             for (Exec e : found.execs()) out.println(Protocol.encodeExec(e));
         }
+        if (datalog) {
+            DatalogFinder.Result found = DatalogFinder.find(api, checked.root(), mutable);
+            for (DatalogSite d : found.sites()) out.println(Protocol.encodeDatalogSite(d));
+        }
         out.println(Protocol.encode("done", String.valueOf(r.skipped())));
     }
 
-    private void load(Map<Path, Boolean> files, int switches, Path markerJar) throws IOException {
+    private void load(Map<Path, Boolean> files, int switches, Path markerJar, boolean hookSolver) throws IOException {
         if (!Files.exists(markerJar)) MarkerJar.write(markerJar);
         MarkerState.publish(switches);
         MarkerState.set(0, false);
-        Object r = api.compileAndLoad(new ArrayList<>(files.keySet()), List.of(markerJar));
+        datalog = hookSolver;
+        DatalogState.clear();
+        Object r = api.compileAndLoad(new ArrayList<>(files.keySet()), List.of(markerJar), hookSolver);
         if (r instanceof FlixApi.Failure f) {
             compileError(f);
             return;
         }
-        tests = api.tests((FlixApi.Program) r).stream().filter(t -> !t.skip()).toList();
+        // the hook's own @Test keeps the hook in the program; it is not a test of the project
+        tests = api.tests((FlixApi.Program) r).stream().filter(t -> !t.skip() && !t.name().startsWith(DATALOG_MODULE + ".")).toList();
         out.println(Protocol.encode("loaded", String.valueOf(tests.size())));
     }
 
@@ -169,7 +186,10 @@ public final class Worker {
     private void runAll(List<FlixApi.TestCase> selected, boolean record) {
         int ran = 0;
         for (FlixApi.TestCase t : selected) {
-            if (record) MarkerState.clear();
+            if (record) {
+                MarkerState.clear();
+                DatalogState.clear();
+            }
             ran++;
             try {
                 t.run().run();
@@ -183,6 +203,11 @@ public final class Worker {
                 int i = 1;
                 for (int id : MarkerState.hit()) fields[i++] = String.valueOf(id);
                 out.println(Protocol.encode("covered", fields));
+                if (datalog) {
+                    DatalogState.Solves solves = DatalogState.read();
+                    for (String rule : solves.rules()) out.println(Protocol.encode("dlhit", t.name(), "R", rule));
+                    for (String fact : solves.facts()) out.println(Protocol.encode("dlhit", t.name(), "F", fact));
+                }
             }
         }
         out.println(Protocol.encode("result", "survived", String.valueOf(ran)));
