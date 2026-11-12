@@ -131,6 +131,24 @@ public final class EngineTest {
             eq(List.of("killed src/A.flix:1:38 + -> -", "killed src/B.flix:1:38 * -> /"), r.results().stream().map(EngineTest::line).toList());
         });
 
+        c.test("sources in subdirectories are numbered in the order of the relative path as text", () -> {
+            // Names sorted without the directory give A.flix before Z.flix (b/A before a/Z); a '/' replaced by a character
+            // above 'T' puts Foo/Bar.flix after FooTest.flix. Either order makes the site table throw.
+            Path root = project(null, "mod TestA { @Test def t(): Unit \\ Assert = { Assert.assertEq(expected = 2, ModB.f(1)); Assert.assertEq(expected = 0, ModZ.f(1));"
+                + " Assert.assertEq(expected = 3, Bar.f(1)); Assert.assertEq(expected = 4, FooT.f(1)) } }\n");
+            for (String[] f : new String[][] {
+                {"src/b/A.flix", "mod ModB { pub def f(x: Int32): Int32 = x + 1 }\n"},
+                {"src/a/Z.flix", "mod ModZ { pub def f(x: Int32): Int32 = x - 1 }\n"},
+                {"src/Foo/Bar.flix", "mod Bar { pub def f(x: Int32): Int32 = x * 3 }\n"},
+                {"src/FooTest.flix", "mod FooT { pub def f(x: Int32): Int32 = x + 3 }\n"}}) {
+                Files.createDirectories(root.resolve(f[0]).getParent());
+                Files.writeString(root.resolve(f[0]), f[1]);
+            }
+            Report r = Engine.run(config(root, null));
+            eq(List.of(1, 2, 3, 4), r.results().stream().map(x -> x.mutant().id()).toList());
+            eq(List.of("src/Foo/Bar.flix", "src/FooTest.flix", "src/a/Z.flix", "src/b/A.flix"), r.results().stream().map(Result::file).toList());
+        });
+
         c.test("a schemata program that does not compile stops the run (a user module named FlixwMutant)", () -> {
             Path root = project("mod FlixwMutant { pub def on(n: Int32): Bool = n == 0 }\nmod A { pub def f(x: Int32): Int32 = x + 1 }\n",
                 "mod TestA { @Test def t(): Unit \\ Assert = Assert.assertEq(expected = 2, A.f(1)) }\n");
