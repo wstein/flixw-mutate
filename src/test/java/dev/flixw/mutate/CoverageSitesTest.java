@@ -101,6 +101,18 @@ public final class CoverageSitesTest {
         return out;
     }
 
+    /**
+     * What a session says about the mutants: each mutant with its position and operators, the MUTANT rows of the
+     * table without ids, the tests that evaluate each mutant's site, and the number of tests.
+     */
+    static List<List<String>> observe(Engine.Config config) throws Exception {
+        try (Session s = Session.open(config)) {
+            List<String> selection = new ArrayList<>();
+            for (Mutant m : s.mutants()) selection.add(s.coverage().testsFor(m.id()).toString());
+            return List.of(describe(s), mutantRows(s.coverage().sites()), selection, List.of(String.valueOf(s.testCount())));
+        }
+    }
+
     /** The report without the line that carries the baseline time (the timeout is ten times it). */
     static String stable(Report r) {
         return r.format().lines().filter(l -> !l.startsWith("tests: ")).collect(Collectors.joining("\n"));
@@ -156,16 +168,15 @@ public final class CoverageSitesTest {
             String name = root.getFileName().toString();
 
             c.test("regions change no mutant and no test selection (" + name + ")", () -> {
-                try (Session plain = Session.open(config(root)); Session with = Session.open(config(root).withRegions())) {
-                    eq(describe(plain), describe(with));
-                    eq(mutantRows(plain.coverage().sites()), mutantRows(with.coverage().sites()));
-                    for (int i = 0; i < plain.mutants().size(); i++)
-                        eq(plain.coverage().testsFor(plain.mutants().get(i).id()), with.coverage().testsFor(with.mutants().get(i).id()));
-                    eq(plain.testCount(), with.testCount());
-                }
+                // one worker JVM at a time
+                List<List<String>> plain = observe(config(root));
+                List<List<String>> with = observe(config(root).withRegions());
+                eq(plain, with);
             });
 
-            if (root.equals(WIDE)) continue; // the reports of the wide fixture are compared by the run of the author (PR text)
+            // The wide fixture has mutants that end in a timeout and runs about 20 s per mode: under load a report
+            // comparison could differ for that reason, so only its mutants and test selection are compared above.
+            if (root.equals(WIDE)) continue;
             c.test("regions change no line of the report, with and without selection (" + name + ")", () -> {
                 for (boolean selection : new boolean[] {true, false}) {
                     Engine.Config base = selection ? config(root) : config(root).withoutSelection();
