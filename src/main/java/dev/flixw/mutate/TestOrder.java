@@ -12,7 +12,8 @@ import java.util.Map;
  * {@code (kills + 1) / (runs + 2)} over the mutants of the same run that executed the test; nothing is stored
  * between runs. Durations under {@link #FLOOR_NANOS} count as the floor (below it they are timer noise, and the
  * chance decides). Equal keys keep the given order, so the first mutant of a run, and any run without durations, go in
- * name order. The order changes only when and which test ends a killed mutant, not whether a mutant is killed.
+ * name order. A mutant that one test fails and another hangs on is killed or timed out by whichever runs first, so the
+ * order can turn TIMEOUT into KILLED; without a hanging test it changes only when and by which test a mutant is killed.
  */
 final class TestOrder {
     /** Five milliseconds. */
@@ -40,14 +41,15 @@ final class TestOrder {
     }
 
     /**
-     * Records one mutant run: the first {@code ran} tests of {@code sent} ran; if {@code killed}, the last of them failed.
-     * A timeout is not recorded (what ran is unknown).
+     * Records one mutant run of {@code sent}: the first {@code r.executed()} tests ran; if the mutant was killed, the last of
+     * them failed. A timeout is not recorded (what ran is unknown); a mutant that no test ran is not either.
      */
-    void record(List<String> sent, int ran, boolean killed) {
-        for (int i = 0; i < ran && i < sent.size(); i++) {
+    void record(List<String> sent, Result r) {
+        if (r.outcome() == Outcome.TIMEOUT) return;
+        for (int i = 0; i < r.executed() && i < sent.size(); i++) {
             int[] h = history.computeIfAbsent(sent.get(i), k -> new int[2]);
             h[0]++;
-            if (killed && i == ran - 1) h[1]++;
+            if (r.outcome() == Outcome.KILLED && i == r.executed() - 1) h[1]++;
         }
     }
 }
