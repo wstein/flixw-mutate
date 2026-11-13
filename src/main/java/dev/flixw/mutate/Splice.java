@@ -54,6 +54,11 @@ public final class Splice {
         return result;
     }
 
+    /**
+     * The original method is looked up on every solve and not cached: a cache would be a static field of this class that holds a
+     * {@code Method} of the program's class loader, and this class lives in the loader of the marker jar, which can outlive the
+     * program (a worker that loads again). The lookup costs far less than the solve it precedes.
+     */
     private static Object original(ClassLoader loader, boolean withProv, Object datalog) throws Throwable {
         Method found = null;
         try {
