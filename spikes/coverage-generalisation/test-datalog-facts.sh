@@ -26,5 +26,8 @@ check() {
 }
 
 check facts-only '' 0 'RESULT: OK'
+check no-provenance -Dflixw.covcfg.noprov=1 1 'RESULT: FAIL 1 deviations'
+grep -qF -- 'DEVIATION relations TestFacts.testNumbers expected solves 1 Num=3 edb 3, got 1 Num=3, edb -1' "$work/facts-no-provenance.out" \
+  && ok 'no-provenance: the deviation is the relations check' || bad 'no-provenance: no relations deviation'
 echo "datalog facts: $pass passed, $fail failed"
 [ "$fail" = 0 ]
