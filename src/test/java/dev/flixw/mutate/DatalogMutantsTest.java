@@ -99,9 +99,37 @@ public final class DatalogMutantsTest {
             yes(r.format().contains(", invalid " + invalid + ", equivalent " + equivalent + ")"), r.format());
         });
 
-        c.test("the mutant of a rule that no test solves is not covered and is not run", () -> {
-            // none in this fixture: the rule of the query over a model has no mutant at all, a `$Result` rule is plumbing of a query
+        c.test("the rule of a query has no mutant (a `$Result` rule is plumbing of the query)", () -> {
             for (Result r : net) yes(!r.mutant().datalog().key().startsWith("$Result"), r.mutant().datalog().key());
+        });
+
+        c.test("a fact that the solver prints differently from the source is reached by name but never changed: not covered, with the reason", () -> {
+            Path dir = Files.createTempDirectory("dl-unmatched");
+            Files.createDirectories(dir.resolve("src"));
+            Files.createDirectories(dir.resolve("test"));
+            Files.writeString(dir.resolve("src/M.flix"), """
+                mod M {
+                    pub def f(): Vector[Int32] =
+                        let p = #{
+                            P(1 + 1).
+                            P(3).
+                            Q(x) :- P(x).
+                        };
+                        query p select x from Q(x)
+                }
+                """);
+            Files.writeString(dir.resolve("test/TestM.flix"), """
+                mod TestM {
+                    use Assert.assertEq;
+                    @Test
+                    def testF(): Unit \\ Assert = assertEq(expected = Vector#{2, 3}, M.f())
+                }
+                """);
+            List<Result> r = run(config(dir));
+            eq(Outcome.NOT_COVERED, find(r, "fact", "P(1+1)", 0).outcome());
+            eq("no solve of the tests contains it by name", find(r, "fact", "P(1+1)", 0).detail());
+            eq(Outcome.KILLED, find(r, "fact", "P(3)", 0).outcome());
+            eq(Outcome.INVALID, find(r, "atom", "Q<-P", 0).outcome());
         });
 
         c.test("without the switch there is no Datalog mutant, and with only withDatalog the run is the run of the hits", () -> {
