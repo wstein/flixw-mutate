@@ -10,4 +10,8 @@ mod TestTwo {
     // Fast, kills every mutant of inc.
     @Test
     def testB2FastKill(): Unit \ Assert = assertEq(expected = 2, Two.inc(1))
+
+    // Does not call inc: never selected, but part of the full run (three tests).
+    @Test
+    def testC3Other(): Unit \ Assert = assertEq(expected = 1, 1)
 }

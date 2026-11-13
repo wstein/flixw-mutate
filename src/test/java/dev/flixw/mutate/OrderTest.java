@@ -102,8 +102,9 @@ public final class OrderTest {
                 // test, whose name-order position (2) is only an upper bound.
                 eq(1, full.results().get(i).executed());
                 yes(selected.results().get(i).fullExecuted() >= full.results().get(i).executed(), "bound");
-                // The slow test is first in name order and not run: it might hang or fail, so the bound is all tests.
-                eq(2, selected.results().get(i).fullExecuted());
+                // The slow test is first in name order and not run: it might hang or fail, so the bound is all three
+                // tests. Without that rule it would be the killer's position (2).
+                eq(3, selected.results().get(i).fullExecuted());
             }
             yes(selected.format().contains("(a full run: at most "), selected.format());
         });
