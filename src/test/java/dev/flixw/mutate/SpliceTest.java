@@ -56,7 +56,12 @@ public final class SpliceTest {
     private static ClassLoader standIns;
 
     static ClassLoader standIns() throws Exception {
-        if (standIns != null) return standIns;
+        if (standIns == null) standIns = newStandIns();
+        return standIns;
+    }
+
+    /** A new class loader with its own copy of the stand-ins. */
+    static ClassLoader newStandIns() throws Exception {
         Path dir = Files.createTempDirectory("splice-test");
         Path classes = dir.resolve("classes");
         Files.createDirectories(classes);
@@ -75,8 +80,7 @@ public final class SpliceTest {
         }
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         eq(0, javac.run(null, null, null, args));
-        standIns = new URLClassLoader(new URL[] {classes.toUri().toURL()}, SpliceTest.class.getClassLoader());
-        return standIns;
+        return new URLClassLoader(new URL[] {classes.toUri().toURL()}, SpliceTest.class.getClassLoader());
     }
 
     /** A constraint set as the solver stand-in prints it, of a class that the stand-ins can be found through. */
@@ -178,6 +182,23 @@ public final class SpliceTest {
             } finally {
                 reset();
             }
+        });
+
+        c.test("the original is looked up once per class of the program, and each program gets its own", () -> {
+            reset();
+            Class<?> first = datum("a").getClass();
+            Class<?> other = newStandIns().loadClass("Fixpoint3.Solver.Def$runSolverInternal$Datum");
+            yes(first != other, "same class");
+            java.lang.reflect.Method m = Splice.solverOf(first);
+            // Without a cache every lookup returns a new Method object.
+            yes(m == Splice.solverOf(first), "looked up again");
+            yes(m == Splice.solverOf(datum("b").getClass()), "looked up again for a second value of the class");
+            java.lang.reflect.Method n = Splice.solverOf(other);
+            yes(n != m, "the Method of the other program is the cached one of the first");
+            eq(first.getClassLoader(), m.getDeclaringClass().getClassLoader());
+            eq(other.getClassLoader(), n.getDeclaringClass().getClassLoader());
+            // The cache did not change what a solve does.
+            eq("solved d", solve(false, "d"));
         });
 
         c.finish();
