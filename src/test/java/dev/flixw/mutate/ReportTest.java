@@ -30,6 +30,22 @@ public final class ReportTest {
 
         c.test("the score counts killed and timed out mutants of all, a mutant that no test reaches is not killed", () -> eq(60.0, r.score()));
 
+        c.test("the score line says what it leaves out only when there are invalid or equivalent mutants", () -> {
+            yes(r.format().contains("mutation score: 60.0% (killed or timed out, of all mutants)\n"), r.format());
+            Report d = new Report(List.of(
+                result(1, Outcome.KILLED, "testA: x", 1, 1, 1),
+                result(2, Outcome.SURVIVED, "", 1, 1, 1),
+                result(3, Outcome.INVALID, "testA: panic", 1, 1, 1),
+                result(4, Outcome.EQUIVALENT, "", 1, 1, 1),
+                result(5, Outcome.EQUIVALENT, "", 1, 1, 1)), 0, 1, 10, 100, null, true);
+            eq(50.0, d.score());
+            yes(d.format().contains("mutants: 5 (killed 1, survived 1, not covered 0, timeout 0, invalid 1, equivalent 2)"), d.format());
+            yes(d.format().contains("mutation score: 50.0% (killed or timed out, of all mutants except invalid and equivalent ones)\n"), d.format());
+            Report only = new Report(List.of(result(1, Outcome.INVALID, "testA: panic", 1, 1, 1)), 0, 1, 10, 100, null, true);
+            eq(-1.0, only.score());
+            yes(only.format().contains("mutation score: n/a (no valid, non-equivalent mutants)\n"), only.format());
+        });
+
         c.test("no mutants: score -1", () -> eq(-1.0, new Report(List.of(), 0, 3, 5, 100).score()));
 
         c.test("one line per mutant, a mutant no test reaches in its own line, then the summary", () -> {
