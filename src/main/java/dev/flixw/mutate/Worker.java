@@ -28,7 +28,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *   {@code regions} it also answers one {@code region} message per coverage region and one {@code exec} message per
  *   expression start of the {@code M} files, before {@code done}. With {@code datalog} it answers one {@code dlsite}
  *   message per Datalog rule and fact of the {@code M} files, before {@code done}.
- * <li>{@code load <listfile> <switches> <markerjar> [datalog]}: compiles and loads the program with the marker jar
+ * <li>{@code load <listfile> <switches> <markerjar> [datalog [mutants]]}: compiles and loads the program with the marker jar
  *   (written there if it does not exist; the switches are 1 to {@code switches}: the ids of the mutants and of the
  *   regions); {@code loaded <tests> [no-solver]} or {@code compile-error}. With {@code datalog} the compiled Fixpoint3 solver
  *   calls the hook module {@code FlixwDatalog} of the list ({@link DatalogHook}) on every solve; {@code no-solver}
@@ -36,10 +36,15 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <li>{@code run <n> [<test>...]}: sets the switch to mutant {@code n} (0: none), runs the named tests in the
  *   given order (all tests in name order without names) and stops at the first failure:
  *   {@code result survived <tests run>} or {@code result killed <test> <description> <tests run>}.
+ * <li>{@code dlrun <op> <key> <atom> [<test>...]}: runs the named tests (all in name order without names) like {@code run}, with the
+ *   Datalog mutant of {@link DatalogMutation} active at the solver (needs {@code load ... datalog mutants}); after each passing test one
+ *   {@code dlmodels <test> <hash>...} message with the fingerprints of the models of its solves, then {@code dlapplied <n>} (how many
+ *   constraints the mutant changed in all solves of the tests that ran), then the result: as for {@code run}, or
+ *   {@code result invalid <test> <description> <tests run>} if a solve of a changed set threw (the test then failed).
  * <li>{@code baseline [<test>...]}: runs like {@code run 0} with the markers recording: one
  *   {@code covered <test> <switch>...} and one {@code timed <test> <nanoseconds>} message per test, then, if the program was loaded with {@code datalog}, one
  *   {@code dlhit <test> R <rule signature>} or {@code dlhit <test> F <fact text>} message per rule and fact of each
- *   solve of the test, then the result.
+ *   solve of the test (and, with {@code mutants}, a {@code dlmodels <test> <hash>...} message), then the result.
  * </ul>
  * A list file has one line per file: {@code M<TAB>path} for a file whose sites are wanted, {@code F<TAB>path}
  * for a file that is only compiled.
@@ -51,6 +56,7 @@ public final class Worker {
     private final PrintStream out;
     private List<FlixApi.TestCase> tests = List.of();
     private boolean datalog;
+    private boolean datalogMutants;
 
     private Worker(FlixApi api, PrintStream out) {
         this.api = api;
@@ -87,8 +93,9 @@ public final class Worker {
         switch (m.verb()) {
             case "sites" -> sites(readList(Path.of(m.field(0))), m.fields().subList(1, m.fields().size()));
             case "load" -> load(readList(Path.of(m.field(0))), Integer.parseInt(m.field(1)), Path.of(m.field(2)),
-                m.fields().size() > 3 && m.field(3).equals("datalog"));
+                m.fields().size() > 3 && m.field(3).equals("datalog"), m.fields().size() > 4 && m.field(4).equals("mutants"));
             case "run" -> run(Integer.parseInt(m.field(0)), m.fields().subList(1, m.fields().size()));
+            case "dlrun" -> dlrun(m.field(0), m.field(1), Integer.parseInt(m.field(2)), m.fields().subList(3, m.fields().size()));
             case "baseline" -> baseline(m.fields());
             default -> out.println(Protocol.encode("error", "unknown request " + m.verb()));
         }
@@ -130,11 +137,12 @@ public final class Worker {
         out.println(Protocol.encode("done", String.valueOf(r.skipped())));
     }
 
-    private void load(Map<Path, Boolean> files, int switches, Path markerJar, boolean hookSolver) throws IOException {
+    private void load(Map<Path, Boolean> files, int switches, Path markerJar, boolean hookSolver, boolean mutants) throws IOException {
         if (!Files.exists(markerJar)) MarkerJar.write(markerJar);
         MarkerState.publish(switches);
         MarkerState.set(0, false);
         datalog = hookSolver;
+        datalogMutants = hookSolver && mutants;
         DatalogState.clear();
         Object r = api.compileAndLoad(new ArrayList<>(files.keySet()), List.of(markerJar), hookSolver);
         if (r instanceof FlixApi.Failure f) {
@@ -180,10 +188,51 @@ public final class Worker {
     private void baseline(List<String> names) {
         List<FlixApi.TestCase> selected = select(names);
         MarkerState.set(0, true);
+        if (datalogMutants) System.setProperty(Splice.MODELS, "1");
         try {
             runAll(selected, true);
         } finally {
             MarkerState.set(0, false);
+            System.clearProperty(Splice.MODELS);
+        }
+    }
+
+    /** Runs the tests with a Datalog mutant active at the solver; see the request {@code dlrun}. */
+    private void dlrun(String op, String key, int atom, List<String> names) {
+        if (!datalogMutants) throw new IllegalStateException("the program was not loaded with Datalog mutants");
+        List<FlixApi.TestCase> selected = select(names);
+        MarkerState.set(0, false);
+        System.setProperty(Splice.OP, op);
+        System.setProperty("flixw.dlm.key", key);
+        System.setProperty("flixw.dlm.atom", String.valueOf(atom));
+        System.setProperty("flixw.dlm.applied", "0");
+        System.setProperty(Splice.MODELS, "1");
+        try {
+            int ran = 0;
+            for (FlixApi.TestCase t : selected) {
+                DatalogState.clear();
+                System.clearProperty(Splice.INVALID);
+                ran++;
+                try {
+                    t.run().run();
+                } catch (RuntimeException | Error e) {
+                    String invalid = System.getProperty(Splice.INVALID);
+                    out.println(Protocol.encode("dlapplied", System.getProperty("flixw.dlm.applied", "0")));
+                    out.println(invalid == null ? Protocol.encode("result", "killed", t.name(), describe(e), String.valueOf(ran))
+                        : Protocol.encode("result", "invalid", t.name(), describe(e), String.valueOf(ran)));
+                    return;
+                }
+                List<String> fields = new ArrayList<>();
+                fields.add(t.name());
+                fields.addAll(DatalogState.models());
+                out.println(Protocol.encode("dlmodels", fields.toArray(new String[0])));
+            }
+            out.println(Protocol.encode("dlapplied", System.getProperty("flixw.dlm.applied", "0")));
+            out.println(Protocol.encode("result", "survived", String.valueOf(ran)));
+        } finally {
+            for (String k : new String[] {Splice.OP, "flixw.dlm.key", "flixw.dlm.atom", "flixw.dlm.applied", Splice.LAST, Splice.INVALID, Splice.MODELS})
+                System.clearProperty(k);
+            DatalogState.clear();
         }
     }
 
@@ -213,6 +262,12 @@ public final class Worker {
                     DatalogState.Solves solves = DatalogState.read();
                     for (String rule : solves.rules()) out.println(Protocol.encode("dlhit", t.name(), "R", rule));
                     for (String fact : solves.facts()) out.println(Protocol.encode("dlhit", t.name(), "F", fact));
+                    if (datalogMutants) {
+                        List<String> models = new ArrayList<>();
+                        models.add(t.name());
+                        models.addAll(DatalogState.models());
+                        out.println(Protocol.encode("dlmodels", models.toArray(new String[0])));
+                    }
                 }
             }
         }

@@ -54,6 +54,8 @@ final class Session implements AutoCloseable {
     private Map<String, Long> testNanos = Map.of();
     private boolean empty;
     private boolean warnedNoSolver;
+    /** The fingerprints of the models of each test's solves in the baseline run (Datalog mutants). */
+    private final Map<String, List<String>> baselineModels = new TreeMap<>();
 
     Session(Engine.Config config, Path root, List<Path> src, List<Path> tests, Path work) {
         this.config = config;
@@ -205,6 +207,7 @@ final class Session implements AutoCloseable {
             loadLines.add("F\t" + target);
         }
         siteTable = plan.table();
+        if (config.datalogMutants()) addDatalogMutants(texts);
         Path module = work.resolve("FlixwMutant.flix");
         workDir.run(() -> Files.writeString(module, Schemata.module(), StandardCharsets.UTF_8));
         loadLines.add("F\t" + module);
@@ -232,6 +235,42 @@ final class Session implements AutoCloseable {
         timeout = config.timeoutMs() != null ? config.timeoutMs() : Engine.defaultTimeout(baselineMs);
     }
 
+    /**
+     * One mutant for each Datalog rule (dropped) and for each body atom of each rule (dropped), one for each fact (dropped).
+     * The ids follow those of the site table: a Datalog mutant is no switch, so the numbers only have to differ.
+     */
+    private void addDatalogMutants(Map<Path, String> texts) {
+        int id = siteTable.size();
+        for (Map.Entry<Integer, DatalogSite> e : plan.datalogSites().entrySet()) {
+            DatalogSite d = e.getValue();
+            // the rule of a query (`query p select ...`) is plumbing of the query, not a rule of the program
+            if (d.kind() == Point.Kind.RULE && d.key().startsWith("$Result<-")) continue;
+            Path path = Path.of(d.file());
+            String rel = root.relativize(path).toString().replace('\\', '/');
+            List<DatalogMutation> ops = new ArrayList<>();
+            List<String> labels = new ArrayList<>();
+            if (d.kind() == Point.Kind.FACT) {
+                ops.add(new DatalogMutation(e.getKey(), DatalogMutation.FACT, d.key().replace("\"", ""), 0));
+                labels.add("(removed)");
+            } else {
+                ops.add(new DatalogMutation(e.getKey(), DatalogMutation.RULE, d.key(), 0));
+                labels.add("(removed)");
+                List<String> atoms = DatalogSite.bodyAtoms(d.key());
+                for (int i = 0; i < atoms.size(); i++) {
+                    ops.add(new DatalogMutation(e.getKey(), DatalogMutation.ATOM, d.key(), i));
+                    labels.add("without body atom " + (i + 1) + " " + atoms.get(i));
+                }
+            }
+            String text = texts.get(path);
+            for (int i = 0; i < ops.size(); i++) {
+                Mutant m = new Mutant(++id, null, (d.kind() == Point.Kind.FACT ? "fact " : "rule ") + d.key(), labels.get(i), ops.get(i));
+                mutants.add(m);
+                positions.put(m.id(), text == null ? d.line() + ":1" : Schemata.position(text, d.span().start()));
+                files.put(m.id(), rel);
+            }
+        }
+    }
+
     // --- runs ------------------------------------------------------------------------------------------------
 
     /**
@@ -257,6 +296,9 @@ final class Session implements AutoCloseable {
                 // a part of a line is reached when the region that owns it is
                 for (int part : plan.lineParts(n)) hits.reach(m.field(0), part);
             }
+        baselineModels.clear();
+        for (Protocol.Message m : reply)
+            if (m.verb().equals("dlmodels")) baselineModels.put(m.field(0), m.fields().subList(1, m.fields().size()));
         if (config.datalog()) {
             // what the solves of each test contained, matched to the rule and fact rows of the table
             Map<String, List<String>> rules = new TreeMap<>();
@@ -304,6 +346,12 @@ final class Session implements AutoCloseable {
      * moves behind a failing one turns a TIMEOUT into KILLED.
      */
     Result run(Mutant m) throws Engine.Failure, IOException {
+        if (m.datalog() != null) {
+            if (!config.selection()) return runDatalog(m, testNames, false);
+            List<String> selected = coverage.testsFor(m.datalog().row());
+            if (selected.isEmpty()) return new Result(m, file(m), position(m), Outcome.NOT_COVERED, "", 0, 0, testCount);
+            return runDatalog(m, config.order() ? order.order(selected) : selected, true);
+        }
         if (!config.selection()) return run(m, testNames, false);
         List<String> selected = config.order() ? order.order(coverage.testsFor(m.id())) : coverage.testsFor(m.id());
         if (selected.isEmpty())
@@ -349,9 +397,55 @@ final class Session implements AutoCloseable {
         return at + 1;
     }
 
+    /**
+     * Runs a Datalog mutant with the named tests. Killed: a test fails. Invalid: a solve of the changed constraint set threw. Else, if
+     * the mutant changed no constraint in any solve, it is not covered (the solves of the tests do not contain it by name); if the
+     * models of all solves equal those of the baseline it is equivalent (weak mutation: no test could tell); otherwise it survived.
+     */
+    private Result runDatalog(Mutant m, List<String> selected, boolean selection) throws Engine.Failure, IOException {
+        DatalogMutation d = m.datalog();
+        List<String> fields = new ArrayList<>(List.of(d.op(), d.key(), String.valueOf(d.atom())));
+        if (selection) fields.addAll(selected);
+        try {
+            List<Protocol.Message> reply = askTimed(Protocol.encode("dlrun", fields.toArray(new String[0])), RUN_END, timeout);
+            Protocol.Message r = reply.get(reply.size() - 1);
+            if (!r.verb().equals("result")) throw failed("mutant " + m.id() + " failed", r);
+            int applied = 0;
+            boolean differs = false;
+            for (Protocol.Message x : reply) {
+                if (x.verb().equals("dlapplied")) applied = Integer.parseInt(x.field(0));
+                if (x.verb().equals("dlmodels") && !x.fields().subList(1, x.fields().size()).equals(baselineModels.get(x.field(0)))) differs = true;
+            }
+            switch (r.field(0)) {
+                case "survived" -> {
+                    int ran = Integer.parseInt(r.field(1));
+                    int full = selection ? testCount : ran;
+                    if (applied == 0)
+                        return new Result(m, file(m), position(m), Outcome.NOT_COVERED, "no solve of the tests contains it by name", selected.size(), ran, full);
+                    return new Result(m, file(m), position(m), differs ? Outcome.SURVIVED : Outcome.EQUIVALENT, "", selected.size(), ran, full);
+                }
+                case "invalid" -> {
+                    int ran = Integer.parseInt(r.field(3));
+                    return new Result(m, file(m), position(m), Outcome.INVALID, r.field(1) + ": " + r.field(2), selected.size(), ran,
+                        selection ? fullBound(selected, ran, r.field(1)) : ran);
+                }
+                default -> {
+                    int ran = Integer.parseInt(r.field(3));
+                    int full = selection ? fullBound(selected, ran, r.field(1)) : ran;
+                    return new Result(m, file(m), position(m), Outcome.KILLED, r.field(1) + ": " + r.field(2), selected.size(), ran, full);
+                }
+            }
+        } catch (WorkerClient.Timeout e) {
+            startWorker();
+            load();
+            return new Result(m, file(m), position(m), Outcome.TIMEOUT, "", selected.size(), selected.size(), testCount);
+        }
+    }
+
     private int load() throws Engine.Failure, IOException {
         List<Protocol.Message> reply = ask(
-            config.datalog() ? Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString(), "datalog")
+            config.datalogMutants() ? Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString(), "datalog", "mutants")
+                : config.datalog() ? Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString(), "datalog")
                 : Protocol.encode("load", loadList.toString(), String.valueOf(siteTable.size()), markerJar.toString()),
             LOAD_END, SETUP_TIMEOUT_MS);
         Protocol.Message last = reply.get(reply.size() - 1);

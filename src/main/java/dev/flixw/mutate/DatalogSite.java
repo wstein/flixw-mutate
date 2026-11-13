@@ -21,6 +21,13 @@ record DatalogSite(Point.Kind kind, String file, Span span, int line, String def
         if (line < 1) throw new IllegalArgumentException("line " + line);
     }
 
+    /** The body atoms of a rule signature {@code Head<-Body1,Body2}, in order (empty for a key without {@code <-}). */
+    static java.util.List<String> bodyAtoms(String ruleKey) {
+        int i = ruleKey.indexOf("<-");
+        if (i < 0 || i + 2 == ruleKey.length()) return java.util.List.of();
+        return java.util.List.of(ruleKey.substring(i + 2).split(",", -1));
+    }
+
     /** The predicate a key starts with: the head of a rule signature, the name of a fact. */
     static String head(String key) {
         int i = 0;

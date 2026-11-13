@@ -29,5 +29,20 @@ final class DatalogState {
         return new Solves(n, rules, facts);
     }
 
+    /** The fingerprints (SHA-256, hex) of the models of the solves since the last {@link #clear}, in solve order. */
+    static List<String> models() {
+        List<String> out = new ArrayList<>();
+        for (int i = 0, n = intProperty(PREFIX + "models"); i < n; i++) out.add(hash(System.getProperty(PREFIX + "model." + i, "")));
+        return out;
+    }
+
+    private static String hash(String text) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static int intProperty(String key) { return Integer.parseInt(System.getProperty(key, "0")); }
 }

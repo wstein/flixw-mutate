@@ -19,8 +19,10 @@ FLIXW_TEST_FIXTURES=$root/src/test/fixtures
 FLIXW_TEST_WIDE=$root/spikes/coverage-selection/fixture-wide
 # The ground-truth files of the coverage spike (site table tests).
 FLIXW_TEST_COVERAGE_SPIKE=$root/spikes/coverage-generalisation
+# The fixture and the planted mutants of the solver-hook spike (Datalog mutant tests).
+FLIXW_TEST_SOLVER_SPIKE=$root/spikes/solver-hook
 FLIXW_TEST_FLIX_JAR=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars}")
-export FLIXW_TEST_FIXTURES FLIXW_TEST_WIDE FLIXW_TEST_COVERAGE_SPIKE FLIXW_TEST_FLIX_JAR
+export FLIXW_TEST_FIXTURES FLIXW_TEST_WIDE FLIXW_TEST_COVERAGE_SPIKE FLIXW_TEST_SOLVER_SPIKE FLIXW_TEST_FLIX_JAR
 javac -Xlint:all -Werror --release 21 -d "$work/classes" @"$work/sources.txt"
 total=0
 bad=0
