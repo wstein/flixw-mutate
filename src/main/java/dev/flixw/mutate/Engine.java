@@ -26,39 +26,52 @@ public final class Engine {
      * @param progress        receives one line per finished mutant and, with datalog, a line starting with {@code warning:} if the
      *                        compiled program has no Fixpoint3 solver class although the sources have Datalog rules or facts
      * @param selection       run only the tests that evaluate the mutant's site (false: all tests for every mutant)
+     * @param order           run the selected tests of a mutant fast and often killing tests first ({@link TestOrder}); false: in
+     *                        name order. Only with selection. A mutant that one test fails and another hangs on is killed or timed
+     *                        out by whichever runs first, so the order can turn TIMEOUT into KILLED (the score counts both alike)
      * @param regions         also mark the regions of the code (function entries, branches, lambda bodies) and the lines they own
      *                        in the same program; they are rows of the site table and change no mutant, no outcome and no report line
      * @param datalog         also record which test solves which Datalog rule and fact (rows of the site table, level reached);
      *                        off: the run is as before
      */
     public record Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
-                         boolean selection, boolean regions, boolean datalog) {
+                         boolean selection, boolean regions, boolean datalog, boolean order) {
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs) {
             this(projectRoot, java, workerClasspath, timeoutMs, line -> { });
         }
 
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress) {
-            this(projectRoot, java, workerClasspath, timeoutMs, progress, true, false, false);
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, true, false, false, true);
         }
 
         public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
                       boolean selection) {
-            this(projectRoot, java, workerClasspath, timeoutMs, progress, selection, false, false);
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, selection, false, false, true);
+        }
+
+        public Config(Path projectRoot, Path java, String workerClasspath, Long timeoutMs, Consumer<String> progress,
+                      boolean selection, boolean regions, boolean datalog) {
+            this(projectRoot, java, workerClasspath, timeoutMs, progress, selection, regions, datalog, true);
         }
 
         /** The same run with every test for every mutant. */
         public Config withoutSelection() {
-            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, false, regions, datalog);
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, false, regions, datalog, order);
         }
 
         /** The same run with the regions of the code marked in the program as well. */
         public Config withRegions() {
-            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, true, datalog);
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, true, datalog, order);
         }
 
         /** The same run with the Datalog rules and facts of the sources recorded per test as well. */
         public Config withDatalog() {
-            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, regions, true);
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, regions, true, order);
+        }
+
+        /** The same run with the selected tests in name order. */
+        public Config withoutOrder() {
+            return new Config(projectRoot, java, workerClasspath, timeoutMs, progress, selection, regions, datalog, false);
         }
     }
 

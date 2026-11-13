@@ -50,7 +50,7 @@ final class Session implements AutoCloseable {
     private List<String> testNames = List.of();
     /** Orders the selected tests of a mutant; built from the baseline durations. */
     private TestOrder order = new TestOrder(Map.of());
-    /** Duration per test of the last baseline run, in nanoseconds. */
+    /** Duration per test of the baseline run of {@link #prepare}, in nanoseconds. */
     private Map<String, Long> testNanos = Map.of();
     private boolean empty;
     private boolean warnedNoSolver;
@@ -223,7 +223,9 @@ final class Session implements AutoCloseable {
         testCount = load();
         if (testCount == 0) throw new Engine.Failure("no tests: the project has no @Test functions that are not skipped");
         long t0 = System.nanoTime();
-        coverage = baseline(List.of());
+        Baseline base = baseline(List.of());
+        coverage = base.coverage();
+        testNanos = base.nanos();
         baselineMs = (System.nanoTime() - t0) / 1_000_000;
         testNames = coverage.tests();
         order = new TestOrder(testNanos);
@@ -236,7 +238,7 @@ final class Session implements AutoCloseable {
      * Runs the baseline in the order given (name order for an empty list) on the loaded program and returns
      * which switches each test evaluated.
      */
-    private Coverage baseline(List<String> order) throws Engine.Failure, IOException {
+    private Baseline baseline(List<String> order) throws Engine.Failure, IOException {
         String[] fields = order.toArray(new String[0]);
         List<Protocol.Message> reply = ask(Protocol.encode("baseline", fields), RUN_END, SETUP_TIMEOUT_MS);
         Protocol.Message base = reply.get(reply.size() - 1);
@@ -246,8 +248,7 @@ final class Session implements AutoCloseable {
         List<Protocol.Message> perTest = reply.subList(0, reply.size() - 1).stream().filter(m -> m.verb().equals("covered")).toList();
         Map<String, Long> nanos = new java.util.HashMap<>();
         for (Protocol.Message m : reply)
-            if (m.verb().equals("timed")) nanos.put(m.field(0), Long.parseLong(m.field(1)));
-        testNanos = nanos;
+            if (m.verb().equals("timed")) nanos.put(m.field(0), parseNanos(m));
         Hits.Builder hits = new Hits.Builder(siteTable, perTest.stream().map(m -> m.field(0)).toList());
         for (Protocol.Message m : perTest)
             for (String id : m.fields().subList(1, m.fields().size())) {
@@ -269,8 +270,23 @@ final class Session implements AutoCloseable {
                     hits.reach(test, id);
             }
         }
-        return new Coverage(siteTable, hits.build());
+        return new Baseline(new Coverage(siteTable, hits.build()), nanos);
     }
+
+    /** The result of a baseline run: which test evaluates which site, and the duration of each test. */
+    private record Baseline(Coverage coverage, Map<String, Long> nanos) { }
+
+    /** The duration in nanoseconds of a {@code timed <test> <ns>} line; a malformed line fails the run. */
+    static long parseNanos(Protocol.Message m) throws Engine.Failure {
+        try {
+            return Long.parseLong(m.field(1));
+        } catch (NumberFormatException | IndexOutOfBoundsException e) {
+            throw new Engine.Failure("malformed timed line from the worker: " + String.join("\t", m.fields()));
+        }
+    }
+
+    /** Duration per test of the baseline run, in nanoseconds. */
+    Map<String, Long> testNanos() { return testNanos; }
 
     /**
      * The baseline on a freshly loaded program, with the tests in the given order: the sets of switches must
@@ -279,20 +295,21 @@ final class Session implements AutoCloseable {
     Coverage freshBaseline(List<String> order) throws Engine.Failure, IOException {
         startWorker();
         load();
-        return baseline(order);
+        return baseline(order).coverage();
     }
 
     /**
      * Runs mutant {@code m}: with test selection only the tests that evaluate its site, fast and often killing
-     * tests first ({@link TestOrder}); the outcome does not depend on the order.
+     * tests first unless {@link Engine.Config#order()} is off ({@link TestOrder}). A hanging test that the order
+     * moves behind a failing one turns a TIMEOUT into KILLED.
      */
     Result run(Mutant m) throws Engine.Failure, IOException {
         if (!config.selection()) return run(m, testNames, false);
-        List<String> selected = order.order(coverage.testsFor(m.id()));
+        List<String> selected = config.order() ? order.order(coverage.testsFor(m.id())) : coverage.testsFor(m.id());
         if (selected.isEmpty())
             return new Result(m, file(m), position(m), Outcome.NOT_COVERED, "", 0, 0, testCount);
         Result r = run(m, selected, true);
-        if (r.outcome() != Outcome.TIMEOUT) order.record(selected, r.executed(), r.outcome() == Outcome.KILLED);
+        order.record(selected, r);
         return r;
     }
 

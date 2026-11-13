@@ -13,7 +13,7 @@ import java.util.Map;
 /** flixw plugin entry point; the shell (context, exit codes) comes from the SDK kit. */
 public final class PluginMain {
     private static final String USAGE =
-        "usage: ./flixw mutate [--timeout-ms <ms>] [--no-selection] [--fail-on-survived] | --help | --version";
+        "usage: ./flixw mutate [--timeout-ms <ms>] [--no-selection] [--no-order] [--fail-on-survived] | --help | --version";
 
     private PluginMain() { }
 
@@ -37,6 +37,7 @@ public final class PluginMain {
             boolean timeoutGiven = false;
             boolean failOnSurvived = false;
             boolean noSelection = false;
+            boolean noOrder = false;
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--timeout-ms" -> {
@@ -48,6 +49,10 @@ public final class PluginMain {
                     case "--no-selection" -> {
                         if (noSelection) throw new Usage("--no-selection given twice");
                         noSelection = true;
+                    }
+                    case "--no-order" -> {
+                        if (noOrder) throw new Usage("--no-order given twice");
+                        noOrder = true;
                     }
                     case "--fail-on-survived" -> {
                         if (failOnSurvived) throw new Usage("--fail-on-survived given twice");
@@ -70,6 +75,7 @@ public final class PluginMain {
             String classpath = pluginLocation() + File.pathSeparator + context.compilerJar();
             Engine.Config config = new Engine.Config(context.projectRoot(), context.java(), classpath, timeoutMs,
                 line -> System.err.println(line), !noSelection);
+            if (noOrder) config = config.withoutOrder();
             Report report = Engine.run(config);
             System.out.print(report.format());
             int survivors = report.count(Outcome.SURVIVED) + report.count(Outcome.NOT_COVERED);
