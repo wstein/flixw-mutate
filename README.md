@@ -87,7 +87,8 @@ evaluates is `not covered` (survived without a run). `--no-selection` runs every
 comparison. The report lists every mutant as `killed`, `survived`, `not covered` or `timeout`, the tests per
 mutant (mean, median, maximum) and the test executions against those of a full run (`at most`: computed from the position
 in name order of the killing test, an upper bound because the selected tests run in another order and a test before
-the killer may fail too; for a timeout the executions are not measured and counted as all selected tests, an upper bound), and the score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
+the killer may fail too; if a selected test that is before the killer in name order did not run, it might hang as well
+(a timeout counts all tests) and the bound is all tests; for a timeout the executions are not measured and counted as all selected tests, an upper bound), and the score (killed or timed out, of all mutants). A mutant that exceeds the timeout (default: ten times the
 baseline run, at least 2000 ms) ends the worker; the next one loads the program again.
 
 Exit codes: 0 report written, 1 survivors with `--fail-on-survived`, 2 the project does not compile, its tests
