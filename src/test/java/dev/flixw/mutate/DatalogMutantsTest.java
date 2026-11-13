@@ -132,6 +132,64 @@ public final class DatalogMutantsTest {
             eq(Outcome.INVALID, find(r, "atom", "Q<-P", 0).outcome());
         });
 
+        c.test("the number of a body atom counts the atoms only: a guard before an atom is not an atom", () -> {
+            Path dir = Files.createTempDirectory("dl-guard");
+            Files.createDirectories(dir.resolve("src"));
+            Files.createDirectories(dir.resolve("test"));
+            Files.writeString(dir.resolve("src/M.flix"), """
+                mod M {
+                    pub def f(): Vector[Int32] =
+                        let p = #{
+                            Num(1). Num(3). Num(5).
+                            Odd(1). Odd(3). Odd(5).
+                            Big(x) :- Num(x), if (x > 2), Odd(x).
+                        };
+                        let m = solve p;
+                        query m select x from Big(x)
+                }
+                """);
+            Files.writeString(dir.resolve("test/TestM.flix"), """
+                mod TestM {
+                    use Assert.assertEq;
+                    @Test
+                    def testF(): Unit \\ Assert = assertEq(expected = Vector#{3, 5}, M.f())
+                }
+                """);
+            List<Result> r = run(config(dir));
+            // atom 1 is Odd(x), behind the guard: it is implied by Num(x) here, so dropping it changes no model
+            eq(Outcome.EQUIVALENT, find(r, "atom", "Big<-Num,Odd", 1).outcome());
+            // atom 0 is Num(x): Odd(x) binds x for the guard, so this changes no model either
+            eq(Outcome.EQUIVALENT, find(r, "atom", "Big<-Num,Odd", 0).outcome());
+            long atoms = r.stream().filter(x -> x.mutant().datalog().op().equals(DatalogMutation.ATOM)).count();
+            eq(2L, atoms);
+        });
+
+        c.test("a fact with a string literal is found at the solver (the quotes of the source are not in its text)", () -> {
+            Path dir = Files.createTempDirectory("dl-string");
+            Files.createDirectories(dir.resolve("src"));
+            Files.createDirectories(dir.resolve("test"));
+            Files.writeString(dir.resolve("src/M.flix"), """
+                mod M {
+                    pub def f(): Vector[String] =
+                        let p = #{
+                            Name("abc"). Name("d e").
+                            Out(x) :- Name(x).
+                        };
+                        query p select x from Out(x)
+                }
+                """);
+            Files.writeString(dir.resolve("test/TestM.flix"), """
+                mod TestM {
+                    use Assert.assertEq;
+                    @Test
+                    def testF(): Unit \\ Assert = assertEq(expected = Vector#{"abc", "d e"}, M.f())
+                }
+                """);
+            List<Result> r = run(config(dir));
+            eq(Outcome.KILLED, find(r, "fact", "Name(abc)", 0).outcome());
+            eq(Outcome.KILLED, find(r, "fact", "Name(d e)", 0).outcome());
+        });
+
         c.test("without the switch there is no Datalog mutant, and with only withDatalog the run is the run of the hits", () -> {
             try (Session s = Session.open(new Engine.Config(DatalogHitsTest.FIXTURE, EngineTest.JAVA, EngineTest.CP, null).withDatalog())) {
                 for (Mutant m : s.mutants()) yes(m.datalog() == null, "a Datalog mutant without the switch");
