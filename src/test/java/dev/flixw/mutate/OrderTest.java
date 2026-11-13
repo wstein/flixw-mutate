@@ -18,6 +18,7 @@ public final class OrderTest {
     static final Path LEARN = FIXTURES.resolve("order-learn");
     static final Path TWO = FIXTURES.resolve("order-two");
     static final Path FLIP = FIXTURES.resolve("order-flip");
+    static final Path FLIP3 = FIXTURES.resolve("order-flip3");
     static final Path DL = FIXTURES.resolve("order-datalog");
 
     static Engine.Config config(Path root) { return new Engine.Config(root, EngineTest.JAVA, EngineTest.CP, null); }
@@ -101,8 +102,24 @@ public final class OrderTest {
                 // test, whose name-order position (2) is only an upper bound.
                 eq(1, full.results().get(i).executed());
                 yes(selected.results().get(i).fullExecuted() >= full.results().get(i).executed(), "bound");
+                // The slow test is first in name order and not run: it might hang or fail, so the bound is all tests.
+                eq(2, selected.results().get(i).fullExecuted());
             }
             yes(selected.format().contains("(a full run: at most "), selected.format());
+        });
+
+        c.test("flip3: the full run times out and counts all tests; the computed full run of the ordered run is not lower", () -> {
+            Engine.Config base = new Engine.Config(FLIP3, EngineTest.JAVA, EngineTest.CP, 2000L);
+            Report full = Engine.run(base.withoutSelection());
+            Report ordered = Engine.run(base);
+            yes(!full.results().isEmpty(), "no mutants");
+            eq(full.results().size(), full.count(Outcome.TIMEOUT));
+            eq(ordered.results().size(), ordered.count(Outcome.KILLED));
+            for (int i = 0; i < full.results().size(); i++) {
+                eq(3, full.results().get(i).executed());
+                yes(ordered.results().get(i).fullExecuted() >= full.results().get(i).executed(),
+                    "computed " + ordered.results().get(i).fullExecuted() + " < measured " + full.results().get(i).executed());
+            }
         });
 
         c.test("datalog hits and the order work in one run: the solving test reaches the rules, the fast killer goes first", () -> {
