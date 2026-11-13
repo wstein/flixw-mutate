@@ -34,7 +34,7 @@ public final class Splice {
         ClassLoader loader = datalog.getClass().getClassLoader();
         boolean record = System.getProperties().get(MarkerState.STATE_KEY) instanceof int[] state && state[1] != 0;
         boolean mutate = System.getProperty(OP) != null;
-        if (!record && !mutate) return original(loader, withProv, datalog);
+        if (!record && !mutate) return original(withProv, datalog);
         if (record) call(loader, "flixwHit", datalog);
         Object input = datalog;
         boolean changed = false;
@@ -45,7 +45,7 @@ public final class Splice {
         }
         Object result;
         try {
-            result = force(original(loader, withProv, input));
+            result = force(original(withProv, input));
         } catch (Throwable t) {
             if (changed) System.setProperty(INVALID, t.getClass().getName() + ": " + t.getMessage());
             throw t;
@@ -55,11 +55,28 @@ public final class Splice {
     }
 
     /**
-     * The original method is looked up on every solve and not cached: a cache would be a static field of this class that holds a
-     * {@code Method} of the program's class loader, and this class lives in the loader of the marker jar, which can outlive the
-     * program (a worker that loads again). The lookup costs far less than the solve it precedes.
+     * The original method of the solver of the program that {@code datalog}'s class belongs to: looked up once per class and
+     * not per solve. The cache is a {@link ClassValue}, not a static map: the value is kept in the class itself, so it goes
+     * with the program's class loader and cannot hold it. A static field of this class would hold the {@code Method} of the
+     * program's class loader, and this class lives in the loader of the marker jar, which can outlive the program (a worker
+     * that loads again). A failed lookup is not cached.
      */
-    private static Object original(ClassLoader loader, boolean withProv, Object datalog) throws Throwable {
+    private static final Originals ORIGINAL = new Originals();
+
+    /** A class of its own, not an anonymous one: it goes into the marker jar (see {@link MarkerJar}). */
+    static final class Originals extends ClassValue<Method> {
+        @Override
+        protected Method computeValue(Class<?> type) {
+            return lookup(type.getClassLoader());
+        }
+    }
+
+    /** The cached {@code staticApply$orig} of the solver class in the class loader of {@code datalog}. */
+    static Method solverOf(Class<?> datalog) {
+        return ORIGINAL.get(datalog);
+    }
+
+    private static Method lookup(ClassLoader loader) {
         Method found = null;
         try {
             for (Method m : loader.loadClass(SOLVER_CLASS).getDeclaredMethods())
@@ -68,8 +85,12 @@ public final class Splice {
             throw new IllegalStateException("the solver class is not in the program: " + SOLVER_CLASS, e);
         }
         if (found == null) throw new IllegalStateException("the solver class has no staticApply$orig: " + SOLVER_CLASS);
+        return found;
+    }
+
+    private static Object original(boolean withProv, Object datalog) throws Throwable {
         try {
-            return found.invoke(null, withProv, datalog);
+            return solverOf(datalog.getClass()).invoke(null, withProv, datalog);
         } catch (InvocationTargetException e) {
             throw e.getCause();
         }

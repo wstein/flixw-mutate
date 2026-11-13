@@ -7,16 +7,16 @@ import java.nio.file.Path;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
-/** The jar with {@link Marker} and {@link Splice} that the compiler gets for the schemata program. */
+/** The jar with {@link Marker}, {@link Splice} and its helper class that the compiler gets for the schemata program. */
 final class MarkerJar {
     static final String CLASS = Marker.class.getName();
 
     private MarkerJar() { }
 
-    /** Writes a jar with the class files of {@link Marker} and {@link Splice}, found next to this class, to {@code target}. */
+    /** Writes a jar with the class files of {@link Marker}, {@link Splice} and {@link Splice.Originals}, found next to this class, to {@code target}. */
     static void write(Path target) throws IOException {
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(target))) {
-            for (Class<?> c : new Class<?>[] {Marker.class, Splice.class}) {
+            for (Class<?> c : new Class<?>[] {Marker.class, Splice.class, Splice.Originals.class}) {
                 String entry = c.getName().replace('.', '/') + ".class";
                 try (InputStream in = c.getClassLoader().getResourceAsStream(entry)) {
                     if (in == null) throw new IOException("class file not found: " + entry);
