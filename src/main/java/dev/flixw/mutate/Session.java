@@ -327,7 +327,7 @@ final class Session implements AutoCloseable {
                 return new Result(m, file(m), position(m), Outcome.SURVIVED, "", selected.size(), ran, selection ? testCount : ran);
             }
             int ran = Integer.parseInt(r.field(3));
-            int full = selection ? testNames.indexOf(r.field(1)) + 1 : ran;
+            int full = selection ? fullBound(selected, ran, r.field(1)) : ran;
             return new Result(m, file(m), position(m), Outcome.KILLED, r.field(1) + ": " + r.field(2), selected.size(), ran, full);
         } catch (WorkerClient.Timeout e) {
             // The worker was killed; the next one loads the program again.
@@ -335,6 +335,18 @@ final class Session implements AutoCloseable {
             load();
             return new Result(m, file(m), position(m), Outcome.TIMEOUT, "", selected.size(), selected.size() /* not measured: upper bound */, testCount);
         }
+    }
+
+    /**
+     * An upper bound of the tests a run of all tests would execute for a mutant killed by {@code killer} after the first
+     * {@code ran} of {@code sent}: the killer's position in name order, unless a selected test that is before it in name
+     * order did not run. That test might fail or hang as well (a hang counts all tests), so then the bound is all tests.
+     */
+    private int fullBound(List<String> sent, int ran, String killer) {
+        int at = testNames.indexOf(killer);
+        for (String t : sent.subList(ran, sent.size()))
+            if (testNames.indexOf(t) < at) return testCount;
+        return at + 1;
     }
 
     private int load() throws Engine.Failure, IOException {
