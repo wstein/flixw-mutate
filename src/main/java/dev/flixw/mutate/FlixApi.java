@@ -76,7 +76,7 @@ final class FlixApi {
 
     /**
      * Compiles and loads the files with the Java libraries {@code jars}; with {@code hookSolver} the compiled
-     * solver of Fixpoint3 calls {@link Splice#before} on its input (see {@link #hookSolver}); {@link Program#hooked}
+     * solver of Fixpoint3 returns {@link Splice#solve} (see {@link #hookSolver}); {@link Program#hooked}
      * tells whether the program had a solver class to rewrite.
      */
     Object compileAndLoad(List<Path> files, List<Path> jars, boolean hookSolver) {
@@ -114,7 +114,7 @@ final class FlixApi {
         Object found = via("scala.collection.immutable.Map", classes, "get", target);
         if (!(Boolean) via("scala.Option", found, "isDefined")) return compiled;
         byte[] patched = SolverPatch.wrap((byte[]) call(via("scala.Option", found, "get"), "bytecode"), SOLVER_METHOD, SOLVER_DESC,
-            Splice.class.getName().replace('.', '/'), "before");
+            Splice.class.getName().replace('.', '/'), "solve");
         try {
             Object jvmClass = cls("ca.uwaterloo.flix.language.phase.jvm.JvmClass").getConstructors()[0].newInstance(target, patched);
             Object newClasses = via("scala.collection.immutable.MapOps", classes, "updated", target, jvmClass);

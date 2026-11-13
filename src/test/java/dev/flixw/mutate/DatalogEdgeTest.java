@@ -22,7 +22,12 @@ public final class DatalogEdgeTest {
         Path src = dir.resolve("src/dev/flixw/mutate/Splice.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package dev.flixw.mutate;\npublic final class Splice {\n    private Splice() { }\n"
-            + "    public static void before(Object datalog) throws Exception {\n" + body + "\n    }\n}\n");
+            + "    public static Object solve(boolean withProv, Object datalog) throws Throwable {\n" + body + "\n"
+            + "        for (java.lang.reflect.Method m : datalog.getClass().getClassLoader().loadClass(\"Fixpoint3.Solver.Def$runSolverInternal\").getDeclaredMethods())\n"
+            + "            if (m.getName().equals(\"staticApply$orig\")) {\n"
+            + "                try { return m.invoke(null, withProv, datalog); } catch (java.lang.reflect.InvocationTargetException e) { throw e.getCause(); }\n"
+            + "            }\n"
+            + "        throw new IllegalStateException(\"no original\");\n    }\n}\n");
         Path classes = dir.resolve("classes");
         Files.createDirectories(classes);
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
