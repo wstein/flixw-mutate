@@ -138,6 +138,20 @@ public final class DatalogMutantsTest {
             }
         });
 
+        c.test("the test order (the default) does not change the outcome of any Datalog mutant", () -> {
+            Engine.Config ordered = config(SPIKE.resolve("fixture"));
+            yes(ordered.order(), "the order is on by default");
+            List<Result> in = run(ordered);
+            List<Result> byName = run(ordered.withoutOrder());
+            eq(in.size(), byName.size());
+            for (int i = 0; i < in.size(); i++) {
+                eq(in.get(i).mutant().datalog(), byName.get(i).mutant().datalog());
+                eq(byName.get(i).outcome(), in.get(i).outcome());
+            }
+            // and both are the planted outcomes of the first test
+            eq(spike.stream().map(Result::outcome).toList(), in.stream().map(Result::outcome).toList());
+        });
+
         c.test("the same outcomes without test selection", () -> {
             List<Result> all = run(config(SPIKE.resolve("fixture")).withoutSelection());
             eq(spike.size(), all.size());
