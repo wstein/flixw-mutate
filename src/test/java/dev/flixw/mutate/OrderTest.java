@@ -18,6 +18,7 @@ public final class OrderTest {
     static final Path LEARN = FIXTURES.resolve("order-learn");
     static final Path TWO = FIXTURES.resolve("order-two");
     static final Path FLIP = FIXTURES.resolve("order-flip");
+    static final Path DL = FIXTURES.resolve("order-datalog");
 
     static Engine.Config config(Path root) { return new Engine.Config(root, EngineTest.JAVA, EngineTest.CP, null); }
 
@@ -102,6 +103,29 @@ public final class OrderTest {
                 yes(selected.results().get(i).fullExecuted() >= full.results().get(i).executed(), "bound");
             }
             yes(selected.format().contains("(a full run: at most "), selected.format());
+        });
+
+        c.test("datalog hits and the order work in one run: the solving test reaches the rules, the fast killer goes first", () -> {
+            Engine.Config config = new Engine.Config(DL, EngineTest.JAVA, EngineTest.CP, null).withDatalog();
+            try (Session s = Session.open(config)) {
+                Coverage cov = s.coverage();
+                eq(List.of(), s.mutants().stream().filter(m -> cov.testsFor(m.id()).size() != 2).toList());
+                long rulesOfSolver = cov.sites().points().stream().filter(p -> p.kind() == Point.Kind.RULE
+                    && cov.hits().level("TestDlOrder.testB2Reach", p.id()) == Hits.REACHED).count();
+                long rulesOfOthers = cov.sites().points().stream().filter(p -> p.kind() == Point.Kind.RULE
+                    && (cov.hits().level("TestDlOrder.testA1Slow", p.id()) == Hits.REACHED
+                        || cov.hits().level("TestDlOrder.testB3Double", p.id()) == Hits.REACHED)).count();
+                eq(2L, rulesOfSolver);
+                eq(0L, rulesOfOthers);
+                yes(s.testNanos().containsKey("TestDlOrder.testA1Slow"), s.testNanos().toString());
+                yes(!s.mutants().isEmpty(), "no mutants");
+                for (Mutant m : s.mutants()) {
+                    Result r = s.run(m);
+                    eq(Outcome.KILLED, r.outcome());
+                    eq(1, r.executed());
+                    yes(r.detail().startsWith("TestDlOrder.testB3Double"), r.detail());
+                }
+            }
         });
 
         c.finish();
