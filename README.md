@@ -65,7 +65,7 @@ The kit's cache (`KeyedStore`) is embedded but not used yet.
 ## Mutation run (option 4)
 
 ```sh
-./flixw mutate [--timeout-ms <ms>] [--no-selection] [--fail-on-survived]
+./flixw mutate [--timeout-ms <ms>] [--no-selection] [--no-order] [--fail-on-survived]
 ```
 
 The project's `src/**/*.flix` files are mutated, its `test/**/*.flix` files and the `@Test` functions in all
@@ -77,8 +77,12 @@ One worker JVM (the project's Java, with the pinned compiler) compiles and loads
 A baseline run with every switch off records which test evaluates which site. A mutant is a switch number and a
 rerun of the tests that evaluate its site, which stops at the first failing test. The tests run by falling
 `p / t`: `t` is the duration in the baseline run (under 5 ms counts as 5 ms), `p` the share of earlier mutants of
-the same run that the test killed, smoothed as `(kills + 1) / (runs + 2)`; nothing is stored between runs. The order
-changes when a killed mutant ends and which failing test the report names, not the outcome. A mutant that no test
+the same run that the test killed, smoothed as `(kills + 1) / (runs + 2)`; nothing is stored between runs.
+`--no-order` runs them in name order. The order changes when a killed mutant ends and which failing test the report
+names (it can differ between runs and from a run with `--no-order` or `--no-selection`); it is always a selected
+test that fails alone under the mutant. If one test fails under a mutant and another hangs, the mutant is `killed` or
+`timeout` by whichever runs first, so the order can turn `timeout` into `killed`; the score counts both alike. Without
+a hanging test the outcome of every mutant is the same. A mutant that no test
 evaluates is `not covered` (survived without a run). `--no-selection` runs every test for every mutant, for
 comparison. The report lists every mutant as `killed`, `survived`, `not covered` or `timeout`, the tests per
 mutant (mean, median, maximum) and the test executions against those of a full run (`at most`: computed from the position
@@ -100,7 +104,7 @@ Limits of the run:
   with threads or state shared between tests are not covered by the checks, and the optimiser may merge or move
   calls of the pure-typed switch (the tests compare selected and full runs on two fixtures, no proof). The
   Datalog route (option 6) has no marker yet.
-- Options given twice (`--timeout-ms`, `--no-selection`, `--fail-on-survived`) are an error; `--fail-on-survived`
+- Options given twice (`--timeout-ms`, `--no-selection`, `--no-order`, `--fail-on-survived`) are an error; `--fail-on-survived`
   counts `not covered` mutants as survivors.
 
 Datalog hits (engine API `Engine.Config.withDatalog()`, no command-line option yet; first step of option 6, no Datalog mutant
