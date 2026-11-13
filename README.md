@@ -29,8 +29,7 @@ same revision. `dist/plugin.jar` holds the classes of `kit/src` and of this repo
 `dev/flixw/plugin/sdk-source.properties` and this repository's `LICENSE` as `META-INF/LICENSE`
 (`package.sh` stops if `kit/resources` already has that file); no SDK JAR is needed at run
 time. The pin names a commit because the SDK has no release asset yet. Replacing it with a
-versioned release asset and its
-SHA-256 is a separate step.
+versioned release asset and its SHA-256 is a separate step.
 
 This writes `dist/plugin.jar` and `dist/SHA256SUMS`; the same source, pin, version and JDK give the
 same JAR (the manifest records the JDK as `Created-By`). `sh scripts/test.sh` runs the source checks (workflow pins, pin guard, packaged contents,
