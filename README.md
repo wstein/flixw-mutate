@@ -1,6 +1,6 @@
 # flixw-mutate
 
-Mutation testing for [Flix](https://flix.dev) projects, as a [flixw](https://github.com/wstein/flixw) plugin (`./flixw mutate`). Status: first version of the engine for functional code (design option 4, mutant schemata); Datalog mutation (option 6) is not built. Start with the [design document](docs/design/DESIGN.md). A typeset PDF is built by CI (`docs` workflow, `design-pdf` artifact) or locally with `sh scripts/docs.sh`.
+Mutation testing for [Flix](https://flix.dev) projects, as a [flixw](https://github.com/wstein/flixw) plugin (`./flixw mutate`). Status: first version of the engine for functional code (design option 4, mutant schemata); Datalog mutation (option 6) has a first stage in the engine API (drop rule, drop fact, drop body atom; see below), no command-line option. Start with the [design document](docs/design/DESIGN.md). A typeset PDF is built by CI (`docs` workflow, `design-pdf` artifact) or locally with `sh scripts/docs.sh`.
 
 The rest of this README is the plugin template it was created from.
 
@@ -96,14 +96,14 @@ fail without a mutation, it has no tests, or a worker failed.
 Limits of the run:
 - A test counts as failed when it throws. `flix test` (0.79.0) also counts a test with output on stderr as failed;
   the worker does not: a mutant that only makes a test write to stderr survives.
-- There is no `invalid` outcome. If the rewritten program does not compile (for example a project module
+- A schemata run has no `invalid` outcome (Datalog mutants do, below). If the rewritten program does not compile (for example a project module
   named `FlixwMutant`), the run stops with exit 2 and the compiler message.
 - The work directory (`flixw-mutate*` in the temporary directory) is removed on exit and on SIGTERM
   (shutdown hook); after SIGKILL it stays. The worker JVM ends when the engine's stdin pipe closes.
 - The selection assumes that a test which does not evaluate a mutant's site behaves as in the baseline: tests
   with threads or state shared between tests are not covered by the checks, and the optimiser may merge or move
   calls of the pure-typed switch (the tests compare selected and full runs on two fixtures, no proof). The
-  Datalog route (option 6) has no marker yet.
+  Datalog route (option 6) has no marker: its mutants are applied at the solver.
 - Options given twice (`--timeout-ms`, `--no-selection`, `--no-order`, `--fail-on-survived`) are an error; `--fail-on-survived`
   counts `not covered` mutants as survivors.
 
@@ -120,8 +120,35 @@ version names the class differently), every one reads `not covered` and the engi
 its progress consumer (standard error in the plugin). The hook relies on Fixpoint3 internals: checked on Flix 0.79.0 only;
 lattices are not covered.
 
+Datalog mutants (engine API `Engine.Config.withDatalogMutants()`, which includes `withDatalog()`; off by default, no command-line
+option yet; first stage of option 6): for each rule one mutant that drops it and one per body atom that drops the atom
+(counted over the body atoms only, so guards and functionals stay), for each fact one mutant that drops it. A mutant is not a
+rewrite of the program: the patched solver calls `Splice.solve`, which runs the compiled hook function `FlixwDatalog.flixwMutate`
+on the constraint set that enters `Fixpoint3.Solver.runSolverInternal`, then the original method. One compile and one load serve all
+mutants; a mutant is a few system properties (`flixw.dlm.*`) and a rerun of the tests that solved its rule or fact in the baseline
+run (test selection by the hits above, in the test order of the run unless `withoutOrder()`; without selection every test). The outcome of a mutant:
+- `killed`: a test fails.
+- `invalid`: a solve of the changed set threw (for example a variable that is no longer bound, which Flix 0.79.0 reports as a
+  panic in the solver); the mutant is no mutant of the program, is not counted as killed and is left out of the score.
+- `equivalent`: all tests pass and the model of every solve equals the model of the baseline (fingerprint of all relations and
+  tuples per solve, compared per test; weak mutation: no test can see it); left out of the score.
+- `survived`: all tests pass although a model differs. `not covered`: no test solved the rule or fact, or the hook found no
+  constraint with that signature or text in the solves of the tests (a fact with a string, character or other literal that
+  Flix prints differently from the source text).
+The report line is `<outcome> file:line:col  rule Head<-Body1,Body2 -> without body atom 2 Body2` (or `-> (removed)`), the
+summary gains `, invalid n, equivalent n` when there are such mutants, and the score then reads "except invalid and equivalent
+ones". Limits: a rule is found by its signature (head and body atom names), so two source rules with the same signature are one
+mutant to the solver (each is dropped or changed in every solve, and both rows report the same outcome); a rule of a query
+(`query p select ...`, head `$Result`) is not mutated; negation, guards, functionals, head variables and lattices are not
+operators of this stage. A test that throws outside a solve of a changed set (after it, for example on a
+result that the mutant emptied) is `killed`. UNKNOWN: Windows, Flix versions other than 0.79.0 (another version names the
+solver class differently: no solver class means every rule and fact reads `not covered` and the warning above), provenance
+(solves with `runSolverWithProvenance` were not tested), lattices, and whether the plugin's own JVM
+behaves as the test JVM does. Compared with the planted mutants of the solver-hook spike (`spikes/solver-hook/mutants.tsv`): 9 of
+its 12 (drop rule and drop atom) are compared and equal; the 3 negation flips have no operator here.
+
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
-operators, Datalog (option 6), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
+operators, Datalog negation, guard and head-variable operators (option 6, later stages), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
 `flix.toml` packages. Tested on Flix 0.79.0 only; the compiler is reached by reflection in `FlixApi`.
 
 ## ABI and safety
