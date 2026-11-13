@@ -9,11 +9,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Route (a) of the solver hook (spike #1): puts a call in front of a static method of a compiled class without
- * changing what the method does. The method {@code name} with the descriptor {@code (Z<ref>)<ref>} is renamed
- * {@code name$orig}; a new method with the old name and descriptor calls {@code hookClass.hookMethod(Object)}
- * with its second argument, then {@code name$orig} with both arguments, and returns its result. Callers of the
- * method, inside the class or in other classes, reach the new method.
+ * Route (a) of the solver hook (spike #1): puts a call around a static method of a compiled class. The method
+ * {@code name} with the descriptor {@code (Z<ref>)<ref>} is renamed {@code name$orig}; a new method with the old
+ * name and descriptor returns {@code hookClass.hookMethod(boolean, Object)} of its two arguments, cast to the return
+ * type. The hook calls {@code name$orig} itself (it may change the argument first, look at the result, or catch
+ * what the original throws). Callers of the method, inside the class or in other classes, reach the new method.
  *
  * <p>This is a minimal class-file edit with no library: the plugin is built without the Flix compiler on its
  * class path, so the ASM that the compiler jar carries cannot be used at build time. The edit appends constant-pool
@@ -39,7 +39,7 @@ final class SolverPatch {
      * @param method     the static method to wrap
      * @param descriptor its descriptor: a boolean, a reference, returning a reference
      * @param hookClass  internal name of the hook class ({@code dev/flixw/mutate/Splice})
-     * @param hookMethod a public static method {@code (Ljava/lang/Object;)V} of the hook class
+     * @param hookMethod a public static method {@code (ZLjava/lang/Object;)Ljava/lang/Object;} of the hook class
      */
     static byte[] wrap(byte[] classFile, String method, String descriptor, String hookClass, String hookMethod) {
         if (!descriptor.matches("\\(ZL[^;\\[]+;\\)L[^;\\[]+;")) throw new NotAsExpected("descriptor not supported: " + descriptor);
@@ -168,17 +168,19 @@ final class SolverPatch {
                 int hookMethodName = next++;
                 added.add(utf8Entry(hookMethod));
                 int hookDesc = next++;
-                added.add(utf8Entry("(Ljava/lang/Object;)V"));
+                added.add(utf8Entry("(ZLjava/lang/Object;)Ljava/lang/Object;"));
                 int hookClassRef = next++;
                 added.add(refEntry(7, hookClassName, 0));
                 int hookNameAndType = next++;
                 added.add(refEntry(12, hookMethodName, hookDesc));
                 int hookRef = next++;
                 added.add(refEntry(10, hookClassRef, hookNameAndType));
-                int origNameAndType = next++;
-                added.add(refEntry(12, origName, target.descIndex()));
-                int origRef = next++;
-                added.add(refEntry(10, thisClass, origNameAndType));
+                String desc = utf8.get(target.descIndex());
+                String returnType = desc.substring(desc.indexOf(")L") + 2, desc.length() - 1);
+                int returnName = next++;
+                added.add(utf8Entry(returnType));
+                int returnClass = next++;
+                added.add(refEntry(7, returnName, 0));
                 if (next > 0xffff) throw new NotAsExpected("constant pool full");
 
                 out.write(in, 0, cpCountOffset);
@@ -194,10 +196,10 @@ final class SolverPatch {
                 methods[at] = (byte) (origName >> 8);
                 methods[at + 1] = (byte) origName;
                 out.write(methods);
-                // the new method: aload_1; invokestatic hook; iload_0; aload_1; invokestatic orig; areturn
+                // the new method: iload_0; aload_1; invokestatic hook; checkcast <return type>; areturn
                 byte[] body = {
-                    0x2b, (byte) 0xb8, (byte) (hookRef >> 8), (byte) hookRef,
-                    0x1a, 0x2b, (byte) 0xb8, (byte) (origRef >> 8), (byte) origRef,
+                    0x1a, 0x2b, (byte) 0xb8, (byte) (hookRef >> 8), (byte) hookRef,
+                    (byte) 0xc0, (byte) (returnClass >> 8), (byte) returnClass,
                     (byte) 0xb0};
                 out.writeShort(target.accessFlags());
                 out.writeShort(target.nameIndex());

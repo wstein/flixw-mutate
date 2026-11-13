@@ -11,8 +11,9 @@ import java.util.List;
 
 /**
  * The class-file edit of the solver hook, on a class of this test with the shape of the solver's method: a
- * static method {@code (Z<ref>)<ref>}. The edit must keep what the method does, call the hook first with the
- * second argument, and leave a second method of the same name alone.
+ * static method {@code (Z<ref>)<ref>}. The edit must make the method return what the hook returns for both
+ * arguments (the hook calls the original, here with a changed argument), keep the original under the new name and
+ * leave a second method of the same name alone.
  */
 public final class SolverPatchTest {
     /** The calls the hook saw, in order, with what the original returned afterwards. */
@@ -37,11 +38,27 @@ public final class SolverPatchTest {
 
         public static String text() { return "text after the two-slot constants"; }
 
+        /** A method with a narrower return type than the hook's. */
+        public static String named(boolean flag, Object datalog) { return "named " + datalog; }
+
         public static boolean twice(Object o) { return staticApply(true, o) != null && staticApply(false, o) != null; }
     }
 
-    /** The hook. */
-    public static void hook(Object datalog) { LOG.add("hook " + datalog); }
+    /** A hook that returns something else than a String. */
+    public static Object wrongHook(boolean flag, Object datalog) { return 42; }
+
+    /** The patched class that the hook calls the original of. */
+    static Class<?> current;
+
+    /** The hook: calls the original with a changed second argument and returns its result. */
+    public static Object hook(boolean flag, Object datalog) {
+        LOG.add("hook " + flag + " " + datalog);
+        try {
+            return current.getMethod("staticApply$orig", boolean.class, Object.class).invoke(null, flag, datalog + "'");
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     static final String TARGET = SolverPatchTest.class.getName().replace('.', '/') + "$Target";
     static final String HOOK = SolverPatchTest.class.getName().replace('.', '/');
@@ -60,17 +77,28 @@ public final class SolverPatchTest {
     }
 
     static Class<?> patched() throws Exception {
-        return new Loader().define(SolverPatch.wrap(original(), "staticApply", DESC, HOOK, "hook"));
+        current = new Loader().define(SolverPatch.wrap(original(), "staticApply", DESC, HOOK, "hook"));
+        return current;
     }
 
     public static void main(String[] args) throws Exception {
         Check c = new Check("SolverPatchTest");
 
-        c.test("the hook runs first with the second argument, then the original, and its result is returned", () -> {
+        c.test("the method returns what the hook returns; the hook sees both arguments and calls the original", () -> {
             LOG.clear();
             Object r = patched().getMethod("staticApply", boolean.class, Object.class).invoke(null, true, "d1");
-            eq("result of d1", r);
-            eq(List.of("hook d1", "orig true d1"), LOG);
+            eq("result of d1'", r);
+            eq(List.of("hook true d1", "orig true d1'"), LOG);
+        });
+
+        c.test("the result is cast to the return type of the method: another type fails in the patched method", () -> {
+            Class<?> t = new Loader().define(SolverPatch.wrap(original(), "named", "(ZLjava/lang/Object;)Ljava/lang/String;", HOOK, "wrongHook"));
+            try {
+                t.getMethod("named", boolean.class, Object.class).invoke(null, true, "d");
+                yes(false, "no exception");
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                yes(e.getCause() instanceof ClassCastException, "expected ClassCastException, got " + e.getCause());
+            }
         });
 
         c.test("the original is kept under the new name", () -> {
@@ -84,7 +112,7 @@ public final class SolverPatchTest {
         c.test("a call inside the class reaches the new method", () -> {
             LOG.clear();
             eq(true, patched().getMethod("twice", Object.class).invoke(null, "d3"));
-            eq(List.of("hook d3", "orig true d3", "hook d3", "orig false d3"), LOG);
+            eq(List.of("hook true d3", "orig true d3'", "hook false d3", "orig false d3'"), LOG);
         });
 
         c.test("a method of the same name with another descriptor is not touched", () -> {
@@ -107,8 +135,8 @@ public final class SolverPatchTest {
             eq(1.5e300, t.getMethod("bigDouble").invoke(null));
             eq("text after the two-slot constants", t.getMethod("text").invoke(null));
             LOG.clear();
-            eq("result of x", t.getMethod("staticApply", boolean.class, Object.class).invoke(null, true, "x"));
-            eq(List.of("hook x", "orig true x"), LOG);
+            eq("result of x'", t.getMethod("staticApply", boolean.class, Object.class).invoke(null, true, "x"));
+            eq(List.of("hook true x", "orig true x'"), LOG);
         });
 
         c.test("a truncated class, a class with trailing bytes and an empty one are refused with NotAsExpected", () -> {

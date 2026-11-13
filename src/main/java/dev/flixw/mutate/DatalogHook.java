@@ -16,6 +16,9 @@ package dev.flixw.mutate;
  * constraint set ({@code query p select ...}) has the rules of the set and one {@code $Result} rule: it is recorded.
  * A solve with no rule at all (a set of facts only) is recorded. A {@code query} directly over a set of facts only has
  * the {@code $Result} rule alone and cannot be told from a query over a model: it is not recorded.
+ * {@code flixwMutate} applies the active Datalog mutant to the set that enters the solver (properties {@code flixw.dlm.*},
+ * see {@link Splice}); {@code flixwModel} records a fingerprint of the model that leaves it ({@code flixw.dl.models},
+ * {@code flixw.dl.model.N}).
  * The module names Fixpoint3 internals (checked on Flix 0.79.0 only).
  */
 final class DatalogHook {
@@ -86,6 +89,94 @@ final class DatalogHook {
                     case _ => None
                 }
 
+                ///
+                /// Applies the active Datalog mutant to the constraint set that enters the solver: the properties `flixw.dlm.op`
+                /// (`rule`: drop the rules with signature `flixw.dlm.key`; `fact`: drop the facts whose text is the key; `atom`: drop
+                /// the body atom number `flixw.dlm.atom`, counted over the body atoms only, of the rules with that signature).
+                /// Writes how many constraints it changed to `flixw.dlm.last` and adds it to `flixw.dlm.applied`. A query over a model
+                /// is left alone.
+                ///
+                @DontInline
+                pub def flixwMutate(d: Fixpoint3.Ast.Datalog.Datalog): Fixpoint3.Ast.Datalog.Datalog = match d {
+                    case Fixpoint3.Ast.Datalog.Datalog.Join(a, b) => Fixpoint3.Ast.Datalog.Datalog.Join(a, flixwMutate(b))
+                    case Fixpoint3.Ast.Datalog.Datalog.Datalog(facts, rules) =>
+                        if (fwOnlyResult(rules)) d
+                        else {
+                            let op = fwGetStr("flixw.dlm.op");
+                            let key = fwGetStr("flixw.dlm.key");
+                            let atom = fwGetInt("flixw.dlm.atom");
+                            let isRule = (c: Fixpoint3.Ast.Datalog.Constraint) -> fwSig(c) == key;
+                            let (facts2, rules2, n) =
+                                if (op == "rule") {
+                                    let kept = Vector.filter(c -> not isRule(c), rules);
+                                    (facts, kept, Vector.length(rules) - Vector.length(kept))
+                                } else if (op == "fact") {
+                                    let kept = Vector.filter(c -> fwFactKey(c) != key, facts);
+                                    (kept, rules, Vector.length(facts) - Vector.length(kept))
+                                } else {
+                                    let hit = (c: Fixpoint3.Ast.Datalog.Constraint) -> isRule(c) and fwAtomCount(c) > atom;
+                                    (facts, Vector.map(c -> if (hit(c)) fwDropAtom(atom, c) else c, rules), Vector.count(hit, rules))
+                                };
+                            let t1 = fwSet("flixw.dlm.last", "${n}");
+                            let t2 = fwSet("flixw.dlm.applied", "${fwGetInt("flixw.dlm.applied") + n}");
+                            if (t1 + t2 < 0) bug!("flixw-datalog") else Fixpoint3.Ast.Datalog.Datalog.Datalog(facts2, rules2)
+                        }
+                    case other => other
+                }
+
+                ///
+                /// Records a fingerprint of a model (the relations in `RelSym` order, the tuples in key order): `flixw.dl.models` is
+                /// the number of models since the last reset, `flixw.dl.model.N` the text of model N.
+                ///
+                @DontInline
+                pub def flixwModel(m: Fixpoint3.Ast.Datalog.Datalog): Int32 = match m {
+                    case Fixpoint3.Ast.Datalog.Datalog.Model(db) =>
+                        let n = fwGetInt("flixw.dl.models");
+                        let t1 = fwSet("flixw.dl.models", "${n + 1}");
+                        let t2 = fwSet("flixw.dl.model.${n}", fwFingerprint(db));
+                        if (t1 + t2 < 0) bug!("flixw-datalog") else n + 1
+                    case _ => 0
+                }
+
+                def fwFingerprint(db: Map[Fixpoint3.Ast.Ram.RelSym, BPlusTree[Vector[Fixpoint3.Boxed], Fixpoint3.Boxed, Static]]): String = unsafe IO {
+                    region rc {
+                        let sb = StringBuilder.empty(rc);
+                        foreach ((relSym, tree) <- db) {
+                            match relSym {
+                                case Fixpoint3.Ast.Ram.RelSym.Symbol(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _) =>
+                                    foreach ((tuple, _) <- tree) {
+                                        StringBuilder.append("${name}(${Vector.join(", ", tuple)})\\n", sb)
+                                    }
+                            }
+                        };
+                        StringBuilder.toString(sb)
+                    }
+                }
+
+                /// A fact as the engine writes the key of a source fact: no white space, no final dot, no string quotes.
+                def fwFactKey(c: Fixpoint3.Ast.Datalog.Constraint): String = match c {
+                    case Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, terms), _) =>
+                        "${name}(${terms |> Vector.map(fwTerm) |> Vector.join(",")})"
+                }
+
+                def fwIsAtom(b: Fixpoint3.Ast.Datalog.BodyPredicate): Bool = match b {
+                    case Fixpoint3.Ast.Datalog.BodyPredicate.BodyAtom(_, _, _, _, _) => true
+                    case _ => false
+                }
+
+                def fwAtomCount(c: Fixpoint3.Ast.Datalog.Constraint): Int32 = match c {
+                    case Fixpoint3.Ast.Datalog.Constraint.Constraint(_, body) => Vector.count(fwIsAtom, body)
+                }
+
+                /// Drops the body atom with number `a` among the body atoms; guards and functionals stay.
+                def fwDropAtom(a: Int32, c: Fixpoint3.Ast.Datalog.Constraint): Fixpoint3.Ast.Datalog.Constraint = match c {
+                    case Fixpoint3.Ast.Datalog.Constraint.Constraint(h, body) =>
+                        let numbered = Vector.mapWithIndex((i, b) -> (fwIsAtom(b) and Vector.count(fwIsAtom, Vector.take(i, body)) == a, b), body);
+                        Fixpoint3.Ast.Datalog.Constraint.Constraint(h, numbered |> Vector.filter(match (drop, _) -> not drop) |> Vector.map(snd))
+                }
+
+                def fwGetStr(key: String): String = unsafe IO { System.getProperty(key, "") }
+
                 def fwSet(key: String, value: String): Int32 = unsafe IO {
                     let _ = System.setProperty(key, value);
                     0
@@ -99,7 +190,8 @@ final class DatalogHook {
                 ///
                 @Test
                 def keepHook(): Unit \\ Assert =
-                    Assert.assertEq(expected = 1, flixwHit(Fixpoint3.Ast.Datalog.Datalog.Datalog(Vector#{}, Vector#{})))
+                    let d = Fixpoint3.Ast.Datalog.Datalog.Datalog(Vector#{}, Vector#{});
+                    Assert.assertEq(expected = 1, flixwHit(d) + flixwModel(flixwMutate(d)))
             }
             """;
     }
