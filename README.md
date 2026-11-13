@@ -133,8 +133,9 @@ run (test selection by the hits above, in the test order of the run unless `with
 - `equivalent`: all tests pass and the model of every solve equals the model of the baseline (fingerprint of all relations and
   tuples per solve, compared per test; weak mutation: no test can see it); left out of the score.
 - `survived`: all tests pass although a model differs. `not covered`: no test solved the rule or fact, or the hook found no
-  constraint with that signature or text in the solves of the tests (a fact with a string, character or other literal that
-  Flix prints differently from the source text).
+  constraint with that signature or text in the solves of the tests (a fact whose terms are not plain literals, such as `P(1 + 1).`,
+  or whose string literal has an escape sequence that Flix prints differently from the source text; the quotes of a plain string
+  literal are not part of the match; characters and other literal kinds were not checked).
 The report line is `<outcome> file:line:col  rule Head<-Body1,Body2 -> without body atom 2 Body2` (or `-> (removed)`), the
 summary gains `, invalid n, equivalent n` when there are such mutants, and the score then reads "except invalid and equivalent
 ones". Limits: a rule is found by its signature (head and body atom names), so two source rules with the same signature are one
