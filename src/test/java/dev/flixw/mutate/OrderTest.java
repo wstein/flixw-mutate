@@ -17,6 +17,7 @@ public final class OrderTest {
     static final Path ORDER = FIXTURES.resolve("order");
     static final Path LEARN = FIXTURES.resolve("order-learn");
     static final Path TWO = FIXTURES.resolve("order-two");
+    static final Path BOUND = FIXTURES.resolve("order-bound");
     static final Path FLIP = FIXTURES.resolve("order-flip");
     static final Path FLIP3 = FIXTURES.resolve("order-flip3");
     static final Path DL = FIXTURES.resolve("order-datalog");
@@ -107,6 +108,20 @@ public final class OrderTest {
                 eq(3, selected.results().get(i).fullExecuted());
             }
             yes(selected.format().contains("(a full run: at most "), selected.format());
+        });
+
+        c.test("bound: the killer is first in name order and the only test that ran: the computed full run is exact", () -> {
+            Report full = Engine.run(config(BOUND).withoutSelection());
+            Report selected = Engine.run(config(BOUND));
+            eq(outcomes(full), outcomes(selected));
+            yes(!full.results().isEmpty(), "no mutants");
+            for (int i = 0; i < full.results().size(); i++) {
+                // The selected run ends on the fast test (1 run of 2 selected); the unrun test is after the killer, so the
+                // bound is the killer's position (1) and equals the measured full run.
+                eq(1, selected.results().get(i).executed());
+                eq(1, full.results().get(i).executed());
+                eq(1, selected.results().get(i).fullExecuted());
+            }
         });
 
         c.test("flip3: the full run times out and counts all tests; the computed full run of the ordered run is not lower", () -> {
