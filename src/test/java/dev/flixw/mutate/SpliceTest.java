@@ -54,6 +54,21 @@ public final class SpliceTest {
         """;
 
     private static ClassLoader standIns;
+    /**
+     * The directories of the stand-ins. The classes are loaded lazily and {@link Check#finish} exits the VM, so a shutdown
+     * hook deletes them.
+     */
+    private static final List<Path> dirs = new java.util.ArrayList<>();
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                cleanup();
+            } catch (Exception e) {
+                System.err.println("SpliceTest: stand-ins not deleted: " + e);
+            }
+        }));
+    }
 
     static ClassLoader standIns() throws Exception {
         if (standIns == null) standIns = newStandIns();
@@ -63,6 +78,7 @@ public final class SpliceTest {
     /** A new class loader with its own copy of the stand-ins. */
     static ClassLoader newStandIns() throws Exception {
         Path dir = Files.createTempDirectory("splice-test");
+        dirs.add(dir);
         Path classes = dir.resolve("classes");
         Files.createDirectories(classes);
         List<String> sources = List.of(SOLVER, MUTATE, MODEL);
@@ -81,6 +97,15 @@ public final class SpliceTest {
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         eq(0, javac.run(null, null, null, args));
         return new URLClassLoader(new URL[] {classes.toUri().toURL()}, SpliceTest.class.getClassLoader());
+    }
+
+    static void cleanup() throws Exception {
+        for (Path dir : dirs) {
+            if (!Files.exists(dir)) continue;
+            try (java.util.stream.Stream<Path> found = Files.walk(dir)) {
+                found.sorted(java.util.Comparator.reverseOrder()).forEach(q -> q.toFile().delete());
+            }
+        }
     }
 
     /** A constraint set as the solver stand-in prints it, of a class that the stand-ins can be found through. */
@@ -199,6 +224,12 @@ public final class SpliceTest {
             eq(other.getClassLoader(), n.getDeclaringClass().getClassLoader());
             // The cache did not change what a solve does.
             eq("solved d", solve(false, "d"));
+        });
+
+        c.test("the directories of the stand-ins are deleted by cleanup", () -> {
+            yes(!dirs.isEmpty(), "no stand-ins were made");
+            cleanup();
+            for (Path dir : dirs) yes(!Files.exists(dir), "left behind: " + dir);
         });
 
         c.finish();
