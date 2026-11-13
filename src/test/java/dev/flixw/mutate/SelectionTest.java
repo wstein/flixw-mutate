@@ -33,6 +33,11 @@ public final class SelectionTest {
         return (r.outcome() == Outcome.NOT_COVERED ? Outcome.SURVIVED : r.outcome()).toString();
     }
 
+    /** {@link #verdict} with the killing test: what the full run says when the selected run goes in name order. */
+    static String verdictWithKiller(Result r) {
+        return verdict(r) + (r.outcome() == Outcome.KILLED ? " " + r.detail() : "");
+    }
+
     /** One line per mutant that differs between the two reports; empty if they agree. */
     static List<String> differences(Report full, Report selected) {
         eq(full.results().size(), selected.results().size());
@@ -124,6 +129,16 @@ public final class SelectionTest {
             eq(full.count(Outcome.SURVIVED), selected.count(Outcome.SURVIVED) + selected.count(Outcome.NOT_COVERED));
             eq("{0=1, 1=33}", distribution(selected));
             eq("{11=34}", distribution(full));
+        });
+
+        c.test("with the order off the killing test is the one of the full run (calc, instances, wide)", () -> {
+            for (Path root : List.of(CALC, SiteFinderTest.INSTANCES, WIDE)) {
+                Report full = Engine.run(config(root).withoutSelection());
+                Report unordered = Engine.run(config(root).withoutOrder());
+                eq(full.results().size(), unordered.results().size());
+                for (int i = 0; i < full.results().size(); i++)
+                    eq(verdictWithKiller(full.results().get(i)), verdictWithKiller(unordered.results().get(i)));
+            }
         });
 
         c.test("calc: executions, measured for the full run and computed for the selected run, agree", () -> {

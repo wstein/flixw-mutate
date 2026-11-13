@@ -68,6 +68,20 @@ public final class TestOrderTest {
             eq(List.of("z", "x", "y"), o.order(List.of("x", "y", "z")));
         });
 
+        c.test("every Config constructor has the order on, withoutOrder turns it off and the other switches keep it", () -> {
+            java.nio.file.Path root = java.nio.file.Path.of(".");
+            java.nio.file.Path exe = java.nio.file.Path.of("java");
+            java.util.function.Consumer<String> progress = line -> { };
+            eq(true, new Engine.Config(root, exe, "cp", null).order());
+            eq(true, new Engine.Config(root, exe, "cp", null, progress).order());
+            eq(true, new Engine.Config(root, exe, "cp", null, progress, false).order());
+            eq(true, new Engine.Config(root, exe, "cp", null, progress, true, true, true).order());
+            Engine.Config off = new Engine.Config(root, exe, "cp", null).withoutOrder();
+            eq(false, off.order());
+            eq(false, off.withRegions().withDatalog().withoutSelection().order());
+            eq(true, new Engine.Config(root, exe, "cp", null).withRegions().withDatalog().withoutSelection().order());
+        });
+
         c.test("the order is a permutation of the input and the input is not changed", () -> {
             List<String> in = List.of("c", "a", "b");
             TestOrder o = new TestOrder(Map.of("a", 50 * MS));

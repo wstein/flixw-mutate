@@ -104,6 +104,13 @@ contains out 'test selection: off'
 # Without the order of the selected tests the outcomes are the same on this fixture.
 full 0 '--no-order' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
 contains out 'mutants: 34 (killed 23, survived 9, not covered 1, timeout 1); sites left out: 0'
+# The order of the selected tests: two slow tests that cannot kill and a fast one that does (order fixture). With the
+# order the fast test ends the mutant; with --no-order the two slow tests run first.
+cp -R "$root/src/test/fixtures/order" "$work/order"
+full 0 '' FLIXW_PROJECT_ROOT="$work/order" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'test executions: 1 (a full run: at most 3, computed)'
+full 0 '--no-order' FLIXW_PROJECT_ROOT="$work/order" FLIXW_COMPILER_JAR="$flix_jar"
+contains out 'test executions: 3 (a full run: at most 3, computed)'
 # A project whose only unkilled mutant is `not covered` (g is never called): --fail-on-survived must still exit 1.
 mkdir -p "$work/uncovered/src" "$work/uncovered/test"
 printf 'mod A {\n    pub def f(x: Int32): Int32 = x + 1\n    pub def g(x: Int32): Int32 = x * 2\n}\n' > "$work/uncovered/src/A.flix"
