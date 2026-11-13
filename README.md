@@ -22,18 +22,18 @@ sh scripts/package.sh 0.1.0
 ```
 
 `scripts/check-sdk-source.sh` runs first and fails on a wrong HEAD, a missing path, tracked,
-untracked or ignored changes under `kit/src` and `kit/resources`, or consumed bytes that differ
-from the pinned Git blobs. There is no download or sibling-checkout fallback; CI checks out the
-same revision. `dist/plugin.jar` holds the classes of `kit/src` and of this repository's
-`src/main/java`, the files of `kit/resources`, the pin as
-`dev/flixw/plugin/sdk-source.properties` and this repository's `LICENSE` as `META-INF/LICENSE`
-(`package.sh` stops if `kit/resources` already has that file); no SDK JAR is needed at run
-time. The pin names a commit because the SDK has no release asset yet. Replacing it with a
-versioned release asset and its SHA-256 is a separate step.
+untracked or ignored changes under `kit/src` and `kit/resources`, or consumed bytes that differ from
+the pinned Git blobs. There is no download or sibling-checkout fallback; CI checks out the same
+revision. `dist/plugin.jar` holds the classes of `kit/src` and of this repository's `src/main/java`,
+the files of `kit/resources`, the pin as `dev/flixw/plugin/sdk-source.properties` and this
+repository's `LICENSE` as `META-INF/LICENSE` (`package.sh` stops if `kit/resources` already has that
+file); no SDK JAR is needed at run time. The pin names a commit because the SDK has no release asset
+yet. Replacing it with a versioned release asset and its SHA-256 is a separate step.
 
-This writes `dist/plugin.jar` and `dist/SHA256SUMS`; the same source, pin, version and JDK give the
-same JAR (the manifest records the JDK as `Created-By`). `sh scripts/test.sh` runs the source checks (workflow pins, pin guard, packaged contents,
-plugin contract, paths with spaces, reproducibility) in a temporary directory, not in `dist/`.
+This writes `dist/plugin.jar` and `dist/SHA256SUMS`; the same source, pin, version and JDK give
+the same JAR (the manifest records the JDK as `Created-By`). `sh scripts/test.sh` runs the
+source checks (workflow pins, pin guard, packaged contents, plugin contract, paths with spaces,
+reproducibility) in a temporary directory, not in `dist/`.
 `FLIXW_MUTATE_DIST` overrides the output directory. Publish both files as immutable release
 assets, then install the JAR explicitly from a tagged release:
 
