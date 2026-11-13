@@ -18,10 +18,13 @@ public record Report(List<Result> results, int skippedSites, int tests, long bas
         return n;
     }
 
-    /** Percentage of mutants that were killed or timed out; -1 if there are no mutants. */
+    /** The mutants that count for the score: all but the invalid and the equivalent ones. */
+    private int scored() { return results.size() - count(Outcome.INVALID) - count(Outcome.EQUIVALENT); }
+
+    /** Percentage of the mutants that were killed or timed out (invalid and equivalent ones left out); -1 if there are none. */
     public double score() {
-        if (results.isEmpty()) return -1;
-        return 100.0 * (count(Outcome.KILLED) + count(Outcome.TIMEOUT)) / results.size();
+        if (scored() == 0) return -1;
+        return 100.0 * (count(Outcome.KILLED) + count(Outcome.TIMEOUT)) / scored();
     }
 
     /** The text report: one line per mutant, then the summary. */
@@ -37,14 +40,18 @@ public record Report(List<Result> results, int skippedSites, int tests, long bas
         sb.append("mutants: ").append(results.size()).append(" (killed ").append(count(Outcome.KILLED))
             .append(", survived ").append(count(Outcome.SURVIVED)).append(", not covered ").append(count(Outcome.NOT_COVERED))
             .append(", timeout ").append(count(Outcome.TIMEOUT))
+            .append(count(Outcome.INVALID) + count(Outcome.EQUIVALENT) == 0 ? ""
+                : ", invalid " + count(Outcome.INVALID) + ", equivalent " + count(Outcome.EQUIVALENT))
             .append("); sites left out: ").append(skippedSites).append('\n');
         sb.append("tests: ").append(tests).append(" (baseline ").append(baselineMs).append(" ms, timeout per mutant ")
             .append(timeoutMs).append(" ms)\n");
         if (!results.isEmpty()) sb.append(selectionLines());
         sb.append(datalogLines());
         sb.append("mutation score: ");
-        if (results.isEmpty()) sb.append("n/a (no mutants)");
-        else sb.append(String.format(java.util.Locale.ROOT, "%.1f%% (killed or timed out, of all mutants)", score()));
+        boolean left = scored() != results.size();
+        if (scored() == 0) sb.append(results.isEmpty() ? "n/a (no mutants)" : "n/a (no valid, non-equivalent mutants)");
+        else sb.append(String.format(java.util.Locale.ROOT, "%.1f%% (killed or timed out, of all mutants%s)", score(),
+            left ? " except invalid and equivalent ones" : ""));
         sb.append('\n');
         return sb.toString();
     }
