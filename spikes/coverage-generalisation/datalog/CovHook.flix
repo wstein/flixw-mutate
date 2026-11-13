@@ -40,8 +40,9 @@ mod FlixwCovHook {
 
     /// A query over a model lowers to a constraint set whose rule heads are all `$Result`: no rule of the program. A query
     /// with the constraint set inside (`query p select ...`) has the program's rules and one `$Result` rule: it is recorded.
+    /// A solve of facts only has no rules at all: it is a program solve (`forAll` on the empty vector is true), recorded too.
     def fwOnlyResult(rules: Vector[Fixpoint3.Ast.Datalog.Constraint]): Bool =
-        Vector.forAll(match Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _), _) -> name == "$Result", rules)
+        Vector.length(rules) > 0 and Vector.forAll(match Fixpoint3.Ast.Datalog.Constraint.Constraint(Fixpoint3.Ast.Datalog.HeadPredicate.HeadAtom(Fixpoint3.Ast.Shared.PredSym.PredSym(name, _), _, _), _) -> name == "$Result", rules)
 
     def fwHasLattice(rules: Vector[Fixpoint3.Ast.Datalog.Constraint]): Bool = Vector.exists(fwConstraintLat, rules)
 
