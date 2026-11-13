@@ -23,6 +23,7 @@ Can the marker approach of #18 be generalised to test coverage of functional Fli
 | `bench/` | hot loops for the marker overhead |
 | `run-datalog.sh`, `datalog/CovHook.flix`, `java/dev/flixw/mutate/DatalogGen.java`, `java/dev/flixw/spike/{CovPatch,GenLauncher}.java` | Datalog prototype: hook (route b), launcher with the patched `Solver.flix`, harness |
 | `datalog-fixture/` | Datalog ground truth: `expected-rules.tsv`, `expected-facts.tsv` |
+| `datalog-facts-fixture/`, `test-datalog-facts.sh` | A solve of facts only (no rules) and its test: the hook records it; with `-Dflixw.covcfg.noprov=1` the relations check rejects `edb` n/a without a rule |
 | `check-formats.py` | LCOV record invariants and Cobertura against `coverage-04.dtd` (Python standard library; the DTD text is parsed, no validator is installed) |
 
 ## Commands
@@ -164,7 +165,7 @@ Findings about the hook input (0.79.0):
 
 ### 2.2 Ground truth
 
-`datalog-fixture/` (`DlNet.flix`, `TestNet.flix`): `reachable()` with 5 facts and 4 rules (one never fires: `Dead(x) :- Reach(x), Edge(x, 99)`), solved then queried; `evens()` with 3 facts, 1 rule with a guard, queried directly; `double()` without Datalog. Expected tuples first derived per rule, fact counts and rule lines are in the TSV files (derived: 1, 2, 0, 1 and 2, 2 for the `$Result` rule; facts 5 and 3). `sh run-datalog.sh`: 12 comparisons (rules, facts, solves per test with relation sizes and tuples from facts), 0 deviating; 2 of 3 tests have a solve; 6 rule signatures, 5 fired in some test, 1 never; rule line unique for 6 of 6. Counter-probes (modified hook through `HOOK=`):
+`datalog-fixture/` (`DlNet.flix`, `TestNet.flix`): `reachable()` with 5 facts and 4 rules (one never fires: `Dead(x) :- Reach(x), Edge(x, 99)`), solved then queried; `evens()` with 3 facts, 1 rule with a guard, queried directly; `double()` without Datalog. Expected tuples first derived per rule, fact counts and rule lines are in the TSV files (derived: 1, 2, 0, 1 and 2, 2 for the `$Result` rule; facts 5 and 3). `sh run-datalog.sh`: 12 comparisons (rules, facts, solves per test with relation sizes and tuples from facts), 0 deviating; 2 of 3 tests have a solve; 6 rule signatures, 5 fired in some test, 1 never; rule line unique for 6 of 6. Counter-probes (modified hook through `HOOK=`): `datalog-facts-fixture/` has one solve of 3 facts and no rule (`sh test-datalog-facts.sh`, 5 checks); `forAll` on the empty rule vector must not classify it as a query over a model.
 
 | Variant | Result |
 | --- | --- |
