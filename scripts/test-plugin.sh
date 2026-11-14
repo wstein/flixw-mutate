@@ -32,7 +32,7 @@ run() {
   env -i PATH="$PATH" JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=\"$jtmp\"" "$@" java -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
   actual=$?
   set -e
-  [ -z "$(ls -A "$jtmp")" ] || fail "'$plugin_args' left in java.io.tmpdir: $(ls -A "$jtmp" | tr '\n' ' ')"
+  [ -z "$(ls -A "$jtmp" 2>/dev/null)" ] || fail "'$plugin_args' left in java.io.tmpdir: $(ls -A "$jtmp" 2>/dev/null | tr '\n' ' ')"
   [ "$actual" -eq "$expected" ] || fail "expected exit $expected for '$plugin_args', got $actual"
   checks=$((checks + 1))
 }
