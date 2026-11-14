@@ -62,10 +62,20 @@ final class Check {
         return p;
     }
 
-    /** Deletes every registered temporary path; a path that cannot be deleted is reported, the others are still tried. */
-    private static synchronized List<String> deleteTemps() {
+    /** The deleting step, replaceable in a test. */
+    interface Deleter { void delete(Path p) throws IOException; }
+
+    /** Deletes the registered temporary paths, then forgets them; see {@link #delete}. */
+    private static synchronized List<String> deleteTemps(Deleter deleter) {
+        List<String> errors = delete(TEMPS, deleter);
+        TEMPS.clear();
+        return errors;
+    }
+
+    /** Deletes every path (a directory with what it holds); one that cannot be deleted is reported, the others are still tried. */
+    static List<String> delete(List<Path> roots, Deleter deleter) {
         List<String> errors = new ArrayList<>();
-        for (Path root : TEMPS) {
+        for (Path root : roots) {
             List<Path> all;
             try (Stream<Path> walk = Files.walk(root)) {
                 all = walk.sorted(Comparator.reverseOrder()).toList();
@@ -75,21 +85,23 @@ final class Check {
             }
             for (Path p : all) {
                 try {
-                    Files.delete(p);
+                    deleter.delete(p);
                 } catch (IOException e) {
                     errors.add("cannot delete " + p + ": " + e);
                 }
             }
         }
-        TEMPS.clear();
         return errors;
     }
 
     /** Deletes the temporary paths, prints the summary and exits with 1 on a failure. */
-    void finish() {
-        for (String e : deleteTemps()) failures.add("temporary files: " + e);
-        for (String f : failures) System.err.println("FAIL " + suite + " " + f);
-        System.out.println(suite + ": " + passed + " passed, " + failures.size() + " failed");
-        System.exit(failures.isEmpty() ? 0 : 1);
+    void finish() { System.exit(complete(System.out, System.err, Files::delete)); }
+
+    /** The work of {@link #finish} without the exit: the exit status. */
+    int complete(java.io.PrintStream out, java.io.PrintStream err, Deleter deleter) {
+        for (String e : deleteTemps(deleter)) failures.add("temporary files: " + e);
+        for (String f : failures) err.println("FAIL " + suite + " " + f);
+        out.println(suite + ": " + passed + " passed, " + failures.size() + " failed");
+        return failures.isEmpty() ? 0 : 1;
     }
 }
