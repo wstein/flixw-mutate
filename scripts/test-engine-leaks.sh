@@ -58,16 +58,31 @@ run env JAVA_TOOL_OPTIONS=-Dflixw.fixture=1
 [ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "JAVA_TOOL_OPTIONS of the caller was not kept (status $status)"; }
 checks=$((checks + 1))
 
-# A TMPDIR with a quote cannot be carried by JAVA_TOOL_OPTIONS: the run stops and says why.
-fixture; suite CleanTest "$CLEAN"
-mkdir "$work/odd\"dir"
-set +e; TMPDIR="$work/odd\"dir" sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"; status=$?; set -e
-[ "$status" -ne 0 ] || fail 'a TMPDIR with a quote did not stop the run'
-grep -q '^test-engine: TMPDIR contains' "$fx/err" || { cat "$fx/err" >&2; fail 'a TMPDIR with a quote: no message'; }
-checks=$((checks + 1))
-fixture; mkdir "$work/odd\\dir"
-set +e; TMPDIR="$work/odd\\dir" sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"; status=$?; set -e
-[ "$status" -ne 0 ] || fail 'a TMPDIR with a backslash did not stop the run'
-grep -q '^test-engine: TMPDIR contains' "$fx/err" || { cat "$fx/err" >&2; fail 'a TMPDIR with a backslash: no message'; }
-checks=$((checks + 1))
+# A TMPDIR with a double quote or a line break cannot be carried by JAVA_TOOL_OPTIONS (JDK 21 splits the value there):
+# the run stops and says why. A single quote and a backslash are carried (probed with JDK 21), so they must not stop it.
+# stops <TMPDIR>: the run must stop with the message.
+stops() {
+  fixture; suite CleanTest "$CLEAN"
+  mkdir "$1"
+  set +e; TMPDIR=$1 sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"; status=$?; set -e
+  [ "$status" -ne 0 ] || fail "a TMPDIR with $2 did not stop the run"
+  grep -q '^test-engine: TMPDIR contains' "$fx/err" || { cat "$fx/err" >&2; fail "a TMPDIR with $2: no message"; }
+  checks=$((checks + 1))
+}
+# carries <TMPDIR>: a leaking suite is still found there, so the property reached the JVM.
+carries() {
+  fixture; suite LeakTest "$LEAK"
+  mkdir "$1"
+  set +e; TMPDIR=$1 sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"; status=$?; set -e
+  [ "$status" -eq 1 ] || { cat "$fx/err" >&2; fail "a TMPDIR with $2: status $status, expected 1"; }
+  grep -q '^test-engine: LeakTest left 1 entries' "$fx/err" || { cat "$fx/err" >&2; fail "a TMPDIR with $2: the leak was not found"; }
+  ! grep -q 'TMPDIR contains' "$fx/err" || fail "a TMPDIR with $2 was refused"
+  checks=$((checks + 1))
+}
+nl='
+'
+stops "$work/odd\"dir" 'a double quote'
+stops "$work/odd${nl}dir" 'a line break'
+carries "$work/odd'dir" 'a single quote'
+carries "$work/odd\\dir" 'a backslash'
 printf 'test-engine-leaks: %s passed, 0 failed\n' "$checks"
