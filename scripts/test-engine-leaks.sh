@@ -59,4 +59,9 @@ set +e; TMPDIR="$work/odd\"dir" sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "
 [ "$status" -ne 0 ] || fail 'a TMPDIR with a quote did not stop the run'
 grep -q '^test-engine: TMPDIR contains' "$fx/err" || { cat "$fx/err" >&2; fail 'a TMPDIR with a quote: no message'; }
 checks=$((checks + 1))
+fixture; mkdir "$work/odd\\dir"
+set +e; TMPDIR="$work/odd\\dir" sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"; status=$?; set -e
+[ "$status" -ne 0 ] || fail 'a TMPDIR with a backslash did not stop the run'
+grep -q '^test-engine: TMPDIR contains' "$fx/err" || { cat "$fx/err" >&2; fail 'a TMPDIR with a backslash: no message'; }
+checks=$((checks + 1))
 printf 'test-engine-leaks: %s passed, 0 failed\n' "$checks"
