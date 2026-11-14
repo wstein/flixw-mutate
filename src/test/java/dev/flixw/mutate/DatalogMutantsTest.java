@@ -104,7 +104,7 @@ public final class DatalogMutantsTest {
         });
 
         c.test("a fact that the solver prints differently from the source is reached by name but never changed: not covered, with the reason", () -> {
-            Path dir = Files.createTempDirectory("dl-unmatched");
+            Path dir = Check.tempDir("dl-unmatched");
             Files.createDirectories(dir.resolve("src"));
             Files.createDirectories(dir.resolve("test"));
             Files.writeString(dir.resolve("src/M.flix"), """
@@ -133,7 +133,7 @@ public final class DatalogMutantsTest {
         });
 
         c.test("the number of a body atom counts the atoms only: a guard before an atom is not an atom", () -> {
-            Path dir = Files.createTempDirectory("dl-guard");
+            Path dir = Check.tempDir("dl-guard");
             Files.createDirectories(dir.resolve("src"));
             Files.createDirectories(dir.resolve("test"));
             Files.writeString(dir.resolve("src/M.flix"), """
@@ -165,7 +165,7 @@ public final class DatalogMutantsTest {
         });
 
         c.test("a fact with a string literal is found at the solver (the quotes of the source are not in its text)", () -> {
-            Path dir = Files.createTempDirectory("dl-string");
+            Path dir = Check.tempDir("dl-string");
             Files.createDirectories(dir.resolve("src"));
             Files.createDirectories(dir.resolve("test"));
             Files.writeString(dir.resolve("src/M.flix"), """

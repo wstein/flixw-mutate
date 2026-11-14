@@ -17,7 +17,7 @@ public final class SchemataCompileTest {
         String text = Files.readString(calc);
         SiteFinder.Result found = SiteFinderTest.findInFixture(text, calc, List.of(testFile));
         Schemata.Rendered rendered = Schemata.render(text, found.sites().get(calc.toString()), 1);
-        Path work = Files.createTempDirectory("schemata-compile");
+        Path work = Check.tempDir("schemata-compile");
         Path renderedCalc = work.resolve("Calc.flix");
         Files.writeString(renderedCalc, rendered.text());
         Path module = work.resolve("FlixwMutant.flix");

@@ -16,7 +16,7 @@ public final class EngineTest {
     static Engine.Config config(Path root, Long timeout) { return new Engine.Config(root, JAVA, CP, timeout); }
 
     static Path project(String src, String test) throws Exception {
-        Path root = Files.createTempDirectory("engine-test");
+        Path root = Check.tempDir("engine-test");
         Files.createDirectories(root.resolve("src"));
         Files.createDirectories(root.resolve("test"));
         if (src != null) Files.writeString(root.resolve("src/A.flix"), src);
@@ -162,7 +162,7 @@ public final class EngineTest {
         });
 
         c.test("SIGTERM removes the work directory", () -> {
-            Path tmp = Files.createTempDirectory("engine-sigterm");
+            Path tmp = Check.tempDir("engine-sigterm");
             Process p = new ProcessBuilder(JAVA.toString(), "-Djava.io.tmpdir=" + tmp, "-cp", CP, "dev.flixw.mutate.EngineRunner",
                 calc.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
             long end = System.nanoTime() + 60_000_000_000L;
@@ -188,7 +188,7 @@ public final class EngineTest {
         });
 
         c.test("a project without src has no mutants and needs no worker", () -> {
-            Path root = Files.createTempDirectory("engine-empty");
+            Path root = Check.tempDir("engine-empty");
             Report r = Engine.run(new Engine.Config(root, Path.of("/nonexistent/java"), "nowhere", null));
             eq(0, r.results().size());
         });

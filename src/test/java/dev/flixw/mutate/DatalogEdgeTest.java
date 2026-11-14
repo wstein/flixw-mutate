@@ -18,7 +18,7 @@ public final class DatalogEdgeTest {
 
     /** A class directory with a replacement of {@link Splice}, which goes first on the worker class path. */
     static Path saboteur(String body) throws Exception {
-        Path dir = Files.createTempDirectory("sabotage-dl");
+        Path dir = Check.tempDir("sabotage-dl");
         Path src = dir.resolve("src/dev/flixw/mutate/Splice.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package dev.flixw.mutate;\npublic final class Splice {\n    private Splice() { }\n"

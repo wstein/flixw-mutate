@@ -283,7 +283,7 @@ public final class SiteTableTest {
             yes(SiteTable.FILE_ORDER.compare("B.flix", "a.flix") < 0, "upper case before lower case");
             yes(SiteTable.FILE_ORDER.compare("src/Foo/Bar.flix", "src/FooTest.flix") < 0, "'/' sorts before 'T'");
             // On Linux the byte order of Path differs from the text order for U+FF5A and U+1F600 (UTF-8 EF.. before F0.., UTF-16 FF5A after D83D)
-            Path dir = Files.createTempDirectory("site-table-order");
+            Path dir = Check.tempDir("site-table-order");
             Path src = Files.createDirectories(dir.resolve("src"));
             String bmp = "\uFF5A.flix";
             String astral = new String(Character.toChars(0x1F600)) + ".flix";

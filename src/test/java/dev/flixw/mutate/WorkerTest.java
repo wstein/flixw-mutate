@@ -108,7 +108,7 @@ public final class WorkerTest {
 
         c.test("the worker ends when its stdin closes after the first answer line of a request", () -> {
             Path calc = SiteFinderTest.FIXTURE;
-            Path list = Files.createTempFile("worker-eof", ".list");
+            Path list = Check.tempFile("worker-eof", ".list");
             Files.writeString(list, "M\t" + calc.resolve("src/Calc.flix") + "\nF\t" + calc.resolve("test/TestCalc.flix") + "\n");
             int code = endedByEof(Protocol.encode("sites", list.toString()) + "\n", true);
             yes(code == 0, "exit code " + code + " (-1: the worker was still running, -2: no answer)");
@@ -117,35 +117,29 @@ public final class WorkerTest {
         c.test("the worker ends when its stdin closes while a test of the request is still running", () -> {
             // The first test is fast, so its answer line comes first; the second sleeps 60 s. Ending within 20 s shows
             // that the end does not wait for the request.
-            Path dir = Files.createTempDirectory("worker-eof-slow");
-            try {
-                Path testFile = dir.resolve("TestSlow.flix");
-                Files.writeString(testFile, """
-                    mod TestSlow {
-                        import java.lang.Thread
+            Path dir = Check.tempDir("worker-eof-slow");
+            Path testFile = dir.resolve("TestSlow.flix");
+            Files.writeString(testFile, """
+                mod TestSlow {
+                    import java.lang.Thread
 
-                        @Test
-                        def testA(): Unit \\ Assert.Assert = Assert.assertEq(expected = 1, 1)
+                    @Test
+                    def testA(): Unit \\ Assert.Assert = Assert.assertEq(expected = 1, 1)
 
-                        @Test
-                        def testB(): Unit \\ {Assert.Assert, IO} =
-                            Thread.sleep(60000i64);
-                            Assert.assertEq(expected = 1, 1)
-                    }
-                    """);
-                Path list = dir.resolve("files.list");
-                Files.writeString(list, "F\t" + testFile + "\n");
-                Path marker = dir.resolve("marker.jar");
-                String input = Protocol.encode("load", list.toString(), "0", marker.toString()) + "\n";
-                long t0 = System.nanoTime();
-                int code = endedAfterLine(input, 20);
-                long ms = (System.nanoTime() - t0) / 1_000_000;
-                yes(code == 0, "exit code " + code + " after " + ms + " ms (-1: the worker was still running, -2: no answer line)");
-            } finally {
-                try (java.util.stream.Stream<Path> found = Files.walk(dir)) {
-                    found.sorted(java.util.Comparator.reverseOrder()).forEach(q -> q.toFile().delete());
+                    @Test
+                    def testB(): Unit \\ {Assert.Assert, IO} =
+                        Thread.sleep(60000i64);
+                        Assert.assertEq(expected = 1, 1)
                 }
-            }
+                """);
+            Path list = dir.resolve("files.list");
+            Files.writeString(list, "F\t" + testFile + "\n");
+            Path marker = dir.resolve("marker.jar");
+            String input = Protocol.encode("load", list.toString(), "0", marker.toString()) + "\n";
+            long t0 = System.nanoTime();
+            int code = endedAfterLine(input, 20);
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+            yes(code == 0, "exit code " + code + " after " + ms + " ms (-1: the worker was still running, -2: no answer line)");
         });
 
         c.finish();

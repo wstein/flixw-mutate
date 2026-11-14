@@ -18,7 +18,7 @@ public final class WorkerClientTest {
 
     public static void main(String[] args) throws Exception {
         Check c = new Check("WorkerClientTest");
-        Path dir = Files.createTempDirectory("worker-client-test");
+        Path dir = Check.tempDir("worker-client-test");
 
         c.test("a request returns the messages up to the terminal one", () -> {
             try (WorkerClient w = start(dir.resolve("a.log"))) {
