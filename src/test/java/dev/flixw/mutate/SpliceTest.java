@@ -54,18 +54,15 @@ public final class SpliceTest {
         """;
 
     private static ClassLoader standIns;
-    /** The directories of the stand-ins; the classes are loaded lazily, so {@link #cleanup} runs after the last case. */
-    private static final List<Path> dirs = new java.util.ArrayList<>();
 
     static ClassLoader standIns() throws Exception {
         if (standIns == null) standIns = newStandIns();
         return standIns;
     }
 
-    /** A new class loader with its own copy of the stand-ins. */
+    /** A new class loader with its own copy of the stand-ins; the directory is deleted by {@code Check.finish}, whenever the case runs. */
     static ClassLoader newStandIns() throws Exception {
-        Path dir = Files.createTempDirectory("splice-test");
-        dirs.add(dir);
+        Path dir = Check.tempDir("splice-test");
         Path classes = dir.resolve("classes");
         Files.createDirectories(classes);
         List<String> sources = List.of(SOLVER, MUTATE, MODEL);
@@ -84,24 +81,6 @@ public final class SpliceTest {
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         eq(0, javac.run(null, null, null, args));
         return new URLClassLoader(new URL[] {classes.toUri().toURL()}, SpliceTest.class.getClassLoader());
-    }
-
-    /** Deletes the directories; a file that cannot be deleted does not stop the others, and the first failure is thrown at the end. */
-    static void cleanup() throws Exception {
-        Exception failure = null;
-        for (Path dir : dirs) {
-            if (!Files.exists(dir)) continue;
-            try (java.util.stream.Stream<Path> found = Files.walk(dir)) {
-                for (Path q : (Iterable<Path>) found.sorted(java.util.Comparator.reverseOrder())::iterator) {
-                    try {
-                        Files.delete(q);
-                    } catch (Exception e) {
-                        if (failure == null) failure = e; else failure.addSuppressed(e);
-                    }
-                }
-            }
-        }
-        if (failure != null) throw failure;
     }
 
     /** A constraint set as the solver stand-in prints it, of a class that the stand-ins can be found through. */
@@ -222,19 +201,7 @@ public final class SpliceTest {
             eq("solved d", solve(false, "d"));
         });
 
-        Exception[] cleanupFailure = new Exception[1];
-        try {
-            cleanup();
-        } catch (Exception e) {
-            cleanupFailure[0] = e;
-        }
-        c.test("the directories of the stand-ins are deleted after the last case", () -> {
-            if (cleanupFailure[0] != null) throw cleanupFailure[0];
-            yes(!dirs.isEmpty(), "no stand-ins were made");
-            for (Path dir : dirs) yes(!Files.exists(dir), "left behind: " + dir);
-        });
-
-        // A case after the last one makes stand-ins too; test-engine.sh fails the suite if one is left in java.io.tmpdir.
+        // test-engine.sh fails the suite if a case, at any position, leaves a directory in java.io.tmpdir.
         c.test("stand-ins made by a case at the end are deleted as well", () -> {
             yes(newStandIns() != null, "no class loader");
         });
