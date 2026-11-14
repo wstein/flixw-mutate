@@ -13,6 +13,7 @@ java_home=$(dirname "$(dirname "$(command -v java)")")
 # The plugin JVM gets its own empty java.io.tmpdir (a launcher argument: the plugin still sees only the variables
 # of run); what is left in it after a run is a leak (the engine work directory is made there).
 mkdir "$work/jtmp"
+jtmp=$work/jtmp
 checks=0
 fail() { echo "test-plugin: $*" >&2; cat "$work/out" "$work/err" >&2; exit 1; }
 # run <expected-exit> "<plugin args, no spaces>" [VAR=value ...]: the plugin sees only those variables.
@@ -20,10 +21,10 @@ run() {
   expected=$1; plugin_args=$2; shift 2
   set +e
   # shellcheck disable=SC2086
-  env -i PATH="$PATH" "$@" java -Djava.io.tmpdir="$work/jtmp" -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
+  env -i PATH="$PATH" "$@" java -Djava.io.tmpdir="$jtmp" -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
   actual=$?
   set -e
-  [ -z "$(ls -A "$work/jtmp")" ] || fail "'$plugin_args' left in java.io.tmpdir: $(ls -A "$work/jtmp" | tr '\n' ' ')"
+  [ -z "$(ls -A "$jtmp")" ] || fail "'$plugin_args' left in java.io.tmpdir: $(ls -A "$jtmp" | tr '\n' ' ')"
   [ "$actual" -eq "$expected" ] || fail "expected exit $expected for '$plugin_args', got $actual"
   checks=$((checks + 1))
 }
@@ -99,6 +100,13 @@ contains out 'survived    src/Calc.flix:4:13  < -> <='
 contains out 'not covered src/Calc.flix:45:28  == -> !='
 contains out 'timeout     src/Calc.flix:11:39  - -> +'
 contains out 'test selection: on; tests per mutant:'
+# Control for the leftover check: the engine makes its work directory in java.io.tmpdir of the plugin JVM. With a
+# directory that does not exist the run must fail at that point; a run that succeeds means the property did not
+# reach the JVM and the empty-directory checks above and below prove nothing.
+saved=$jtmp; jtmp=$work/missing-tmpdir
+full 2 '' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
+contains err 'cannot create a work directory'
+jtmp=$saved
 full 1 '--fail-on-survived' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
 contains out 'mutation score: 70.6%'
 # Without selection every mutant runs every test: the survivors are the 10 of the full run.
