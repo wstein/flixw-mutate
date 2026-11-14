@@ -60,6 +60,18 @@ public final class CheckTest {
             Files.delete(dir);
         });
 
+        c.test("a registered path that is already deleted is not a failure", () -> {
+            Path dir = Check.tempDir("check-test");
+            Files.writeString(dir.resolve("f"), "x");
+            Path file = Check.tempFile("check-test", ".txt");
+            Files.delete(dir.resolve("f"));
+            Files.delete(dir);
+            Files.delete(file);
+            Outcome o = complete(new Check("inner"), Files::delete);
+            eq(0, o.status());
+            eq("", o.err());
+        });
+
         c.finish();
     }
 }
