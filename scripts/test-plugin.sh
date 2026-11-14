@@ -10,6 +10,9 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 revision=$(awk -F= '$1 == "revision" {print $2}' "$root/sdk-source.properties")
 java_home=$(dirname "$(dirname "$(command -v java)")")
+# The plugin JVM gets its own empty java.io.tmpdir (a launcher argument: the plugin still sees only the variables
+# of run); what is left in it after a run is a leak (the engine work directory is made there).
+mkdir "$work/jtmp"
 checks=0
 fail() { echo "test-plugin: $*" >&2; cat "$work/out" "$work/err" >&2; exit 1; }
 # run <expected-exit> "<plugin args, no spaces>" [VAR=value ...]: the plugin sees only those variables.
@@ -17,9 +20,10 @@ run() {
   expected=$1; plugin_args=$2; shift 2
   set +e
   # shellcheck disable=SC2086
-  env -i PATH="$PATH" "$@" java -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
+  env -i PATH="$PATH" "$@" java -Djava.io.tmpdir="$work/jtmp" -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
   actual=$?
   set -e
+  [ -z "$(ls -A "$work/jtmp")" ] || fail "'$plugin_args' left in java.io.tmpdir: $(ls -A "$work/jtmp" | tr '\n' ' ')"
   [ "$actual" -eq "$expected" ] || fail "expected exit $expected for '$plugin_args', got $actual"
   checks=$((checks + 1))
 }
