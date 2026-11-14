@@ -98,7 +98,7 @@ public final class SelectionTest {
 
     /** A Marker that never records, in a class directory that goes first on the worker class path. */
     static Path saboteur() throws Exception {
-        Path dir = Files.createTempDirectory("sabotage");
+        Path dir = Check.tempDir("sabotage");
         Path src = dir.resolve("src/dev/flixw/mutate/Marker.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
