@@ -16,6 +16,14 @@ case $work in
   *\"* | *'
 '*) echo "test-engine: TMPDIR contains a double quote or a newline: $work" >&2; exit 2 ;;
 esac
+# _JAVA_OPTIONS and JDK_JAVA_OPTIONS take precedence over JAVA_TOOL_OPTIONS (probed with JDK 21): a java.io.tmpdir in
+# either would send the temporary files of the suites elsewhere and the leak check below would find nothing.
+for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
+  eval "val=\${$var:-}"
+  case $val in
+    *java.io.tmpdir*) echo "test-engine: $var sets java.io.tmpdir, which would hide leftovers: unset it" >&2; exit 2 ;;
+  esac
+done
 # javac reads an @argfile with whitespace separation unless a path is quoted (as package.sh does).
 quote() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'; }
 find "$root/src/main/java/dev/flixw/mutate" "$root/src/test/java" -name '*.java' | LC_ALL=C sort | quote > "$work/sources.txt"
@@ -34,7 +42,8 @@ javac -Xlint:all -Werror --release 21 -d "$work/classes" @"$work/sources.txt"
 total=0
 bad=0
 # Each suite gets its own empty java.io.tmpdir; what is left in it afterwards is a leak (see test-engine-leaks.sh).
-# The property reaches the JVMs a suite starts through JAVA_TOOL_OPTIONS, appended to the caller's value. The JVM
+# The property reaches the JVMs a suite starts through JAVA_TOOL_OPTIONS, appended to the caller's value (the last -D
+# wins, so a java.io.tmpdir of the caller does not hide a leak). The JVM
 # prints "Picked up JAVA_TOOL_OPTIONS: ..." on stderr for every JVM that reads it; that line cannot be switched off,
 # so it appears once per suite and once per child JVM (stdout and the results are not affected).
 leaks=0
