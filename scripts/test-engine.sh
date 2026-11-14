@@ -9,6 +9,11 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/mutate engine.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+# The JAVA_TOOL_OPTIONS value set below is parsed with quote characters: a path with a quote, a backslash or a newline cannot be carried (checked first, before any tool sees the path).
+case $work in
+  *[\"\'\\]* | *'
+'*) echo "test-engine: TMPDIR contains a quote, a backslash or a newline: $work" >&2; exit 2 ;;
+esac
 # javac reads an @argfile with whitespace separation unless a path is quoted (as package.sh does).
 quote() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'; }
 find "$root/src/main/java/dev/flixw/mutate" "$root/src/test/java" -name '*.java' | LC_ALL=C sort | quote > "$work/sources.txt"
@@ -26,11 +31,14 @@ export FLIXW_TEST_FIXTURES FLIXW_TEST_WIDE FLIXW_TEST_COVERAGE_SPIKE FLIXW_TEST_
 javac -Xlint:all -Werror --release 21 -d "$work/classes" @"$work/sources.txt"
 total=0
 bad=0
-# Each suite gets its own empty java.io.tmpdir (JVMs started by the suite inherit it; the path is quoted, it contains a space); what is left in it afterwards is a leak.
+# Each suite gets its own empty java.io.tmpdir; what is left in it afterwards is a leak (see test-engine-leaks.sh).
+# The property reaches the JVMs a suite starts through JAVA_TOOL_OPTIONS, appended to the caller's value. The JVM
+# prints "Picked up JAVA_TOOL_OPTIONS: ..." on stderr for every JVM that reads it; that line cannot be switched off,
+# so it appears once per suite and once per child JVM (stdout and the results are not affected).
 leaks=0
 for t in $(cd "$root/src/test/java/dev/flixw/mutate" && ls ./*Test.java | sed 's|^\./||; s|\.java$||'); do
   mkdir "$work/tmp-$t"
-  if JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=\"$work/tmp-$t\"" java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out"; then
+  if JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.io.tmpdir=\"$work/tmp-$t\"" java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out"; then
     total=$((total + $(tail -n 1 "$work/out" | awk '{print $2}')))
   else
     bad=$((bad + 1)); echo "test-engine: $t failed" >&2
