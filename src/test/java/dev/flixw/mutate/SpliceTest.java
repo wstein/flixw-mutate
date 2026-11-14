@@ -234,6 +234,11 @@ public final class SpliceTest {
             for (Path dir : dirs) yes(!Files.exists(dir), "left behind: " + dir);
         });
 
+        // A case after the last one makes stand-ins too; test-engine.sh fails the suite if one is left in java.io.tmpdir.
+        c.test("stand-ins made by a case at the end are deleted as well", () -> {
+            yes(newStandIns() != null, "no class loader");
+        });
+
         c.finish();
     }
 }
