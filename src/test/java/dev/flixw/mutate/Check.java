@@ -76,6 +76,7 @@ final class Check {
     static List<String> delete(List<Path> roots, Deleter deleter) {
         List<String> errors = new ArrayList<>();
         for (Path root : roots) {
+            if (!Files.exists(root, java.nio.file.LinkOption.NOFOLLOW_LINKS)) continue; // the case deleted it itself
             List<Path> all;
             try (Stream<Path> walk = Files.walk(root)) {
                 all = walk.sorted(Comparator.reverseOrder()).toList();
