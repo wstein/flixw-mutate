@@ -46,6 +46,12 @@ grep -q '^test-engine: LeakTest left 1 entries' "$fx/err" || { cat "$fx/err" >&2
 grep -q '^test-engine: 1 leftover temp entries$' "$fx/err" || fail 'a leaking suite: no total'
 checks=$((checks + 1))
 
+# A FLIXW_TEST_JARS of the caller is a directory of the fixture's compiler stub: nothing is written next to it.
+fixture; suite CleanTest "$CLEAN"; run env FLIXW_TEST_JARS="$fx/jars"
+[ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "FLIXW_TEST_JARS of the caller: status $status"; }
+[ ! -e "$fx/jars.jar" ] || fail 'the fetch stub wrote jars.jar next to FLIXW_TEST_JARS'
+checks=$((checks + 1))
+
 # The caller's JAVA_TOOL_OPTIONS stays in effect next to the temporary directory.
 fixture; suite OptionsTest '        if (!"1".equals(System.getProperty("flixw.fixture"))) System.exit(1);'
 run env JAVA_TOOL_OPTIONS=-Dflixw.fixture=1
