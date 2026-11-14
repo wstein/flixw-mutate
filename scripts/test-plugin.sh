@@ -6,12 +6,20 @@ jar=${1:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
 version=${2:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
 work=$(mktemp -d "${TMPDIR:-/tmp}/mutate plugin.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+case $work in
+  *\"* | *'
+'*) echo "test-plugin: TMPDIR contains a double quote or a newline: $work" >&2; exit 2 ;;
+esac
 trap 'exit 130' INT
 trap 'exit 143' TERM
 revision=$(awk -F= '$1 == "revision" {print $2}' "$root/sdk-source.properties")
 java_home=$(dirname "$(dirname "$(command -v java)")")
-# The plugin JVM gets its own empty java.io.tmpdir (a launcher argument: the plugin still sees only the variables
-# of run); what is left in it after a run is a leak (the engine work directory is made there).
+# Every JVM of a run gets its own empty java.io.tmpdir, through JAVA_TOOL_OPTIONS: the plugin JVM and the worker JVMs
+# it starts (WorkerClient) inherit the environment, a launcher argument would reach only the plugin JVM (probed:
+# the worker process has the variable). A path with a double quote or a newline cannot be carried (checked above).
+# Besides the FLIXW_* variables of run the plugin therefore sees JAVA_TOOL_OPTIONS (and prints "Picked up
+# JAVA_TOOL_OPTIONS" on stderr for each JVM). What is left in the directory after a run is a leak (the engine work
+# directory is made there). The control further down proves the directory is the one in use.
 mkdir "$work/jtmp"
 jtmp=$work/jtmp
 checks=0
@@ -21,7 +29,7 @@ run() {
   expected=$1; plugin_args=$2; shift 2
   set +e
   # shellcheck disable=SC2086
-  env -i PATH="$PATH" "$@" java -Djava.io.tmpdir="$jtmp" -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
+  env -i PATH="$PATH" JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=\"$jtmp\"" "$@" java -jar "$jar" $plugin_args > "$work/out" 2> "$work/err"
   actual=$?
   set -e
   [ -z "$(ls -A "$jtmp")" ] || fail "'$plugin_args' left in java.io.tmpdir: $(ls -A "$jtmp" | tr '\n' ' ')"
