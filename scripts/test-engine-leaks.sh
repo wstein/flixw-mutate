@@ -58,6 +58,27 @@ run env JAVA_TOOL_OPTIONS=-Dflixw.fixture=1
 [ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "JAVA_TOOL_OPTIONS of the caller was not kept (status $status)"; }
 checks=$((checks + 1))
 
+# A java.io.tmpdir of the caller's JAVA_TOOL_OPTIONS must not hide a leak: the own property comes last and wins.
+fixture; suite LeakTest "$LEAK"; mkdir "$fx/elsewhere"
+run env JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=\"$fx/elsewhere\""
+[ "$status" -eq 1 ] || { cat "$fx/err" >&2; fail "a java.io.tmpdir of the caller hid a leak (status $status)"; }
+grep -q '^test-engine: LeakTest left 1 entries' "$fx/err" || { cat "$fx/err" >&2; fail "a java.io.tmpdir of the caller: the leak was not named"; }
+checks=$((checks + 1))
+
+# _JAVA_OPTIONS and JDK_JAVA_OPTIONS are read after JAVA_TOOL_OPTIONS and win over it: with a java.io.tmpdir in either
+# the leak check would look at an empty directory, so the run stops; without one they stay in effect.
+for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
+  fixture; suite CleanTest "$CLEAN"
+  run env "$var=-Djava.io.tmpdir=\"$fx/elsewhere\""
+  [ "$status" -eq 2 ] || { cat "$fx/err" >&2; fail "$var with java.io.tmpdir: status $status, expected 2"; }
+  grep -q "^test-engine: $var sets java.io.tmpdir" "$fx/err" || { cat "$fx/err" >&2; fail "$var with java.io.tmpdir: no message"; }
+  checks=$((checks + 1))
+  fixture; suite OptionsTest '        if (!"1".equals(System.getProperty("flixw.fixture"))) System.exit(1);'
+  run env "$var=-Dflixw.fixture=1"
+  [ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "$var without java.io.tmpdir stopped the run (status $status)"; }
+  checks=$((checks + 1))
+done
+
 # A TMPDIR with a double quote or a line break cannot be carried by JAVA_TOOL_OPTIONS (JDK 21 splits the value there):
 # the run stops and says why. A single quote and a backslash are carried (probed with JDK 21), so they must not stop it.
 # stops <TMPDIR>: the run must stop with the message.
