@@ -54,21 +54,8 @@ public final class SpliceTest {
         """;
 
     private static ClassLoader standIns;
-    /**
-     * The directories of the stand-ins. The classes are loaded lazily and {@link Check#finish} exits the VM, so a shutdown
-     * hook deletes them.
-     */
+    /** The directories of the stand-ins; the classes are loaded lazily, so {@link #cleanup} runs after the last case. */
     private static final List<Path> dirs = new java.util.ArrayList<>();
-
-    static {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                cleanup();
-            } catch (Exception e) {
-                System.err.println("SpliceTest: stand-ins not deleted: " + e);
-            }
-        }));
-    }
 
     static ClassLoader standIns() throws Exception {
         if (standIns == null) standIns = newStandIns();
@@ -99,13 +86,22 @@ public final class SpliceTest {
         return new URLClassLoader(new URL[] {classes.toUri().toURL()}, SpliceTest.class.getClassLoader());
     }
 
+    /** Deletes the directories; a file that cannot be deleted does not stop the others, and the first failure is thrown at the end. */
     static void cleanup() throws Exception {
+        Exception failure = null;
         for (Path dir : dirs) {
             if (!Files.exists(dir)) continue;
             try (java.util.stream.Stream<Path> found = Files.walk(dir)) {
-                found.sorted(java.util.Comparator.reverseOrder()).forEach(q -> q.toFile().delete());
+                for (Path q : (Iterable<Path>) found.sorted(java.util.Comparator.reverseOrder())::iterator) {
+                    try {
+                        Files.delete(q);
+                    } catch (Exception e) {
+                        if (failure == null) failure = e; else failure.addSuppressed(e);
+                    }
+                }
             }
         }
+        if (failure != null) throw failure;
     }
 
     /** A constraint set as the solver stand-in prints it, of a class that the stand-ins can be found through. */
@@ -226,9 +222,15 @@ public final class SpliceTest {
             eq("solved d", solve(false, "d"));
         });
 
-        c.test("the directories of the stand-ins are deleted by cleanup", () -> {
-            yes(!dirs.isEmpty(), "no stand-ins were made");
+        Exception[] cleanupFailure = new Exception[1];
+        try {
             cleanup();
+        } catch (Exception e) {
+            cleanupFailure[0] = e;
+        }
+        c.test("the directories of the stand-ins are deleted after the last case", () -> {
+            if (cleanupFailure[0] != null) throw cleanupFailure[0];
+            yes(!dirs.isEmpty(), "no stand-ins were made");
             for (Path dir : dirs) yes(!Files.exists(dir), "left behind: " + dir);
         });
 
