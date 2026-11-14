@@ -21,7 +21,7 @@ fixture() {
   mkdir -p "$fx/scripts" "$fx/spikes/common" "$fx/src/main/java/dev/flixw/mutate" "$fx/src/test/java/dev/flixw/mutate" "$fx/tmp"
   cp "$root/scripts/test-engine.sh" "$fx/scripts/"
   # No compiler jar is needed: the fixture suites do not use it.
-  printf '#!/bin/sh\ntouch "$1.jar"\necho "$1.jar"\n' > "$fx/spikes/common/fetch-flix.sh"
+  printf '#!/bin/sh\nmkdir -p "$1"\ntouch "$1/flix.jar"\necho "$1/flix.jar"\n' > "$fx/spikes/common/fetch-flix.sh"
   printf 'package dev.flixw.mutate;\nfinal class Fixture { }\n' > "$fx/src/main/java/dev/flixw/mutate/Fixture.java"
 }
 LEAK='        java.nio.file.Files.writeString(java.nio.file.Files.createTempFile("leak", ".txt"), "x");'
