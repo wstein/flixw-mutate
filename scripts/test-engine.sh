@@ -26,13 +26,21 @@ export FLIXW_TEST_FIXTURES FLIXW_TEST_WIDE FLIXW_TEST_COVERAGE_SPIKE FLIXW_TEST_
 javac -Xlint:all -Werror --release 21 -d "$work/classes" @"$work/sources.txt"
 total=0
 bad=0
+# Each suite gets its own empty java.io.tmpdir (JVMs started by the suite inherit it; the path is quoted, it contains a space); what is left in it afterwards is a leak.
+leaks=0
 for t in $(cd "$root/src/test/java/dev/flixw/mutate" && ls ./*Test.java | sed 's|^\./||; s|\.java$||'); do
-  if java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out"; then
+  mkdir "$work/tmp-$t"
+  if JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=\"$work/tmp-$t\"" java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out"; then
     total=$((total + $(tail -n 1 "$work/out" | awk '{print $2}')))
   else
     bad=$((bad + 1)); echo "test-engine: $t failed" >&2
   fi
   cat "$work/out"
+  left=$(ls -A "$work/tmp-$t" | wc -l | tr -d ' ')
+  if [ "$left" -ne 0 ]; then
+    leaks=$((leaks + left)); echo "test-engine: $t left $left entries in its temp directory:" >&2; ls -A "$work/tmp-$t" >&2
+  fi
 done
+if [ "$leaks" -ne 0 ]; then echo "test-engine: $leaks leftover temp entries" >&2; exit 1; fi
 if [ "$bad" -ne 0 ]; then echo "test-engine: $bad suite(s) failed" >&2; exit 1; fi
 echo "test-engine: $total passed, 0 failed"
