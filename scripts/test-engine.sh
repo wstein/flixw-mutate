@@ -9,10 +9,12 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/mutate engine.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-# The JAVA_TOOL_OPTIONS value set below is parsed with quote characters: a path with a quote, a backslash or a newline cannot be carried (checked first, before any tool sees the path).
+# The JAVA_TOOL_OPTIONS value set below puts the path in double quotes. The JVM (probed with JDK 21) carries a single
+# quote and a backslash inside them, but ends the value at a double quote ("Unmatched quote") and splits it at a line
+# break: only those two are refused here (checked first, before any tool sees the path).
 case $work in
-  *[\"\'\\]* | *'
-'*) echo "test-engine: TMPDIR contains a quote, a backslash or a newline: $work" >&2; exit 2 ;;
+  *\"* | *'
+'*) echo "test-engine: TMPDIR contains a double quote or a newline: $work" >&2; exit 2 ;;
 esac
 # javac reads an @argfile with whitespace separation unless a path is quoted (as package.sh does).
 quote() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'; }
