@@ -5,6 +5,8 @@ umask 022
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 work=$(mktemp -d "${TMPDIR:-/tmp}/mutate versions.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 fail() { echo "test-flix-versions: $*" >&2; exit 1; }
 mkdir -p "$work/bin"
 cat > "$work/bin/curl" <<'CURL'
@@ -37,4 +39,4 @@ done
 if grep -q '^ExtraTest:' "$work/out"; then fail 'fixture selection included ExtraTest'; fi
 grep -q '^test-engine: 7 passed, 0 failed$' "$work/out" || fail 'fixture total is wrong'
 if sh "$fx/scripts/test-engine.sh" --bogus > "$work/out" 2> "$work/err"; then fail 'unknown engine argument accepted'; fi
-echo 'test-flix-versions: 16 passed, 0 failed'
+echo 'test-flix-versions: 22 passed, 0 failed'
