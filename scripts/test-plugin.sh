@@ -4,6 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 jar=${1:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
 version=${2:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
+flix_version=${FLIXW_FLIX_VERSION:-0.79.0}
 work=$(mktemp -d "${TMPDIR:-/tmp}/mutate plugin.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 case $work in
@@ -40,8 +41,8 @@ run() {
 full() {
   expected=$1; plugin_args=$2; shift 2
   run "$expected" "$plugin_args" FLIXW_ABI_VERSION=1 FLIXW_PROJECT_ROOT="$work" \
-    FLIXW_COMPILER_JAR="$work/flix-0.79.0.jar" FLIXW_JAVA_HOME="$java_home" \
-    FLIXW_COMPILER_VERSION=0.79.0 "$@"
+    FLIXW_COMPILER_JAR="$work/flix-$flix_version.jar" FLIXW_JAVA_HOME="$java_home" \
+    FLIXW_COMPILER_VERSION="$flix_version" "$@"
 }
 contains() { grep -qF -- "$2" "$work/$1" || fail "$1 lacks: $2"; checks=$((checks + 1)); }
 run 2 ''
@@ -58,7 +59,7 @@ contains err 'FLIXW_COMPILER_VERSION'
 full 2 '' FLIXW_COMPILER_VERSION='  '
 contains err 'FLIXW_COMPILER_VERSION'
 full 0 ''
-contains out "flixw-mutate plugin=$version sdk=$revision flix=0.79.0"
+contains out "flixw-mutate plugin=$version sdk=$revision flix=$flix_version"
 # The three levels are separate fields: a changed Flix version changes only flix=.
 full 0 '' FLIXW_COMPILER_VERSION=0.77.0
 contains out "plugin=$version sdk=$revision flix=0.77.0"

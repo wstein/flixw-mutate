@@ -4,6 +4,11 @@
 # Tests that need the Flix compiler fetch the pinned flix.jar (digest-checked, spikes/common/fetch-flix.sh).
 set -eu
 umask 022
+case ${1:-} in
+  "") [ "$#" -eq 0 ] || { echo "usage: test-engine.sh [--fixtures]" >&2; exit 2; }; suites=all ;;
+  --fixtures) [ "$#" -eq 1 ] || { echo "usage: test-engine.sh [--fixtures]" >&2; exit 2; }; suites=fixtures ;;
+  *) echo "usage: test-engine.sh [--fixtures]" >&2; exit 2 ;;
+esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 work=$(mktemp -d "${TMPDIR:-/tmp}/mutate engine.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -47,7 +52,12 @@ bad=0
 # prints "Picked up JAVA_TOOL_OPTIONS: ..." on stderr for every JVM that reads it; that line cannot be switched off,
 # so it appears once per suite and once per child JVM (stdout and the results are not affected).
 leaks=0
-for t in $(cd "$root/src/test/java/dev/flixw/mutate" && ls ./*Test.java | sed 's|^\./||; s|\.java$||'); do
+if [ "$suites" = fixtures ]; then
+  tests="SchemataCompileTest SchemataTest EngineTest DatalogHitsTest DatalogEdgeTest DatalogMutantsTest OrderTest"
+else
+  tests=$(cd "$root/src/test/java/dev/flixw/mutate" && ls ./*Test.java | sed 's|^\./||; s|\.java$||')
+fi
+for t in $tests; do
   mkdir "$work/tmp-$t"
   if JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.io.tmpdir=\"$work/tmp-$t\"" java -cp "$work/classes:$FLIXW_TEST_FLIX_JAR" "dev.flixw.mutate.$t" > "$work/out"; then
     total=$((total + $(tail -n 1 "$work/out" | awk '{print $2}')))

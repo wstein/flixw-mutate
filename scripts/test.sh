@@ -11,6 +11,7 @@ trap 'exit 143' TERM
 # One compiler jar for the engine and plugin tests (digest-checked, cached for this run).
 FLIXW_TEST_JARS=$work/jars
 export FLIXW_TEST_JARS
+sh "$root/scripts/test-flix-versions.sh"
 sh "$root/scripts/test-workflows.sh"
 sh "$root/scripts/test-signals.sh"
 sh "$root/scripts/test-engine-leaks.sh"
@@ -66,6 +67,11 @@ sh "$root/scripts/package.sh" 0.0.0-test >/dev/null
 sh "$root/scripts/check-sdk-package.sh" "$work/dist/plugin.jar"
 sh "$root/scripts/test-plugin.sh" "$work/dist/plugin.jar" 0.0.0-test
 sh "$root/scripts/test-paths.sh"
+# CI also runs the selected fixtures against the previous compiler.
+if [ "${FLIXW_TEST_LEGACY:-0}" = 1 ]; then
+  FLIXW_FLIX_VERSION=0.79.0 sh "$root/scripts/test-engine.sh" --fixtures
+  FLIXW_FLIX_VERSION=0.79.0 sh "$root/scripts/test-plugin.sh" "$work/dist/plugin.jar" 0.0.0-test
+fi
 first=$(shasum -a 256 "$work/dist/plugin.jar" | awk '{print $1}')
 sleep 3
 sh "$root/scripts/package.sh" 0.0.0-test >/dev/null
