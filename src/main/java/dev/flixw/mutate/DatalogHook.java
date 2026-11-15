@@ -19,7 +19,7 @@ package dev.flixw.mutate;
  * {@code flixwMutate} applies the active Datalog mutant to the set that enters the solver (properties {@code flixw.dlm.*},
  * see {@link Splice}); {@code flixwModel} records a fingerprint of the model that leaves it ({@code flixw.dl.models},
  * {@code flixw.dl.model.N}).
- * The module names Fixpoint3 internals (checked on Flix 0.79.0 only).
+ * The module names Fixpoint3 internals (checked on Flix 0.79.0 and 0.80.0).
  */
 final class DatalogHook {
     static final String FILE = "FlixwDatalog.flix";
@@ -56,7 +56,7 @@ final class DatalogHook {
 
                 def fwInput(d: Fixpoint3.Ast.Datalog.Datalog): Option[(Vector[Fixpoint3.Ast.Datalog.Constraint], Vector[Fixpoint3.Ast.Datalog.Constraint])] = match d {
                     case Fixpoint3.Ast.Datalog.Datalog.Datalog(f, r) => Some((f, r))
-                    // a set composed with injected facts (p <+> inject ...) arrives as a join in 0.79.0 (DatalogEdgeTest)
+                    // a set composed with injected facts (p <+> inject ...) arrives as a join in 0.79.0 and 0.80.0 (DatalogEdgeTest)
                     case Fixpoint3.Ast.Datalog.Datalog.Join(_, b) => fwInput(b)
                     case _ => None
                 }

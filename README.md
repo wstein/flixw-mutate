@@ -117,7 +117,7 @@ unless the test's own def has one); a query over a model (`query m select ...` a
 reads `not covered`, and so is a `query` directly over a set of facts only (it looks like a query over a model).
 If the sources have Datalog rules or facts but the compiled program has no solver class (nothing solves them, or another Flix
 version names the class differently), every one reads `not covered` and the engine passes one line starting with `warning:` to
-its progress consumer (standard error in the plugin). The hook relies on Fixpoint3 internals: checked on Flix 0.79.0 only;
+its progress consumer (standard error in the plugin). The hook relies on Fixpoint3 internals: checked on Flix 0.79.0 and 0.80.0;
 lattices are not covered.
 
 Datalog mutants (engine API `Engine.Config.withDatalogMutants()`, which includes `withDatalog()`; off by default, no command-line
@@ -142,7 +142,7 @@ ones". Limits: a rule is found by its signature (head and body atom names), so t
 mutant to the solver (each is dropped or changed in every solve, and both rows report the same outcome); a rule of a query
 (`query p select ...`, head `$Result`) is not mutated; negation, guards, functionals, head variables and lattices are not
 operators of this stage. A test that throws outside a solve of a changed set (after it, for example on a
-result that the mutant emptied) is `killed`. UNKNOWN: Windows, Flix versions other than 0.79.0 (another version names the
+result that the mutant emptied) is `killed`. UNKNOWN: Windows, Flix versions other than 0.79.0 and 0.80.0 (another version may name the
 solver class differently: no solver class means every rule and fact reads `not covered` and the warning above), provenance
 (solves with `runSolverWithProvenance` were not tested), lattices, and whether the plugin's own JVM
 behaves as the test JVM does. Compared with the planted mutants of the solver-hook spike (`spikes/solver-hook/mutants.tsv`): 9 of
@@ -150,7 +150,8 @@ its 12 (drop rule and drop atom) are compared and equal; the 3 negation flips ha
 
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog negation, guard and head-variable operators (option 6, later stages), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
-`flix.toml` packages. Tested on Flix 0.79.0 only; the compiler is reached by reflection in `FlixApi`.
+`flix.toml` packages. The compiler is reached by reflection in `FlixApi`. Engine fixtures have been tested on Flix 0.79.0 and 0.80.0; other versions are untested. Flix 0.80.0 makes `val` a keyword, so projects using it as an
+identifier must rename it before compiling with that version.
 
 ## ABI and safety
 
