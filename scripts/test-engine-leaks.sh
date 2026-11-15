@@ -29,7 +29,7 @@ CLEAN='        java.nio.file.Files.delete(java.nio.file.Files.createTempFile("cl
 # <extra env assignments...> are passed before sh; the run's streams go to $fx/out and $fx/err, the status to $status.
 run() {
   set +e
-  TMPDIR="$fx/tmp" "$@" sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"
+  TMPDIR="$fx/tmp" FLIXW_TEST_JARS= "$@" sh "$fx/scripts/test-engine.sh" > "$fx/out" 2> "$fx/err"
   status=$?
   set -e
 }
@@ -46,9 +46,13 @@ grep -q '^test-engine: LeakTest left 1 entries' "$fx/err" || { cat "$fx/err" >&2
 grep -q '^test-engine: 1 leftover temp entries$' "$fx/err" || fail 'a leaking suite: no total'
 checks=$((checks + 1))
 
-# A FLIXW_TEST_JARS of the caller is a directory of the fixture's compiler stub: nothing is written next to it.
-fixture; suite CleanTest "$CLEAN"; run env FLIXW_TEST_JARS="$fx/jars"
+# An inherited FLIXW_TEST_JARS must not let the stub write outside its fixture.
+fixture; suite CleanTest "$CLEAN"
+FLIXW_TEST_JARS=$fx/jars; export FLIXW_TEST_JARS
+run env
+unset FLIXW_TEST_JARS
 [ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "FLIXW_TEST_JARS of the caller: status $status"; }
+[ ! -e "$fx/jars" ] || fail 'the fetch stub wrote into FLIXW_TEST_JARS'
 [ ! -e "$fx/jars.jar" ] || fail 'the fetch stub wrote jars.jar next to FLIXW_TEST_JARS'
 checks=$((checks + 1))
 
