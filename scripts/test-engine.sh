@@ -25,9 +25,18 @@ esac
 # either would send the temporary files of the suites elsewhere and the leak check below would find nothing.
 for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
   eval "val=\${$var:-}"
-  case $val in
-    *java.io.tmpdir*) echo "test-engine: $var sets java.io.tmpdir, which would hide leftovers: unset it" >&2; exit 2 ;;
-  esac
+  # Treat quote delimiters as token boundaries; indirect option files cannot be inspected by this guard.
+  options=$(printf '%s' "$val" | tr "\"'" '  ')
+  set -f
+  for option in $options; do
+    case $option in
+      -Djava.io.tmpdir|-Djava.io.tmpdir=*)
+        echo "test-engine: $var sets java.io.tmpdir, which would hide leftovers: unset it" >&2; exit 2 ;;
+      @*|-XX:VMOptionsFile|-XX:VMOptionsFile=*)
+        echo "test-engine: $var cannot verify java.io.tmpdir through an options file: unset it" >&2; exit 2 ;;
+    esac
+  done
+  set +f
 done
 # javac reads an @argfile with whitespace separation unless a path is quoted (as package.sh does).
 quote() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'; }

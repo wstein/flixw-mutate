@@ -83,6 +83,25 @@ for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
   checks=$((checks + 1))
 done
 
+# Indirect JVM options cannot be inspected here; reject them before javac or java reads them.
+for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
+  for option in '@options' '-XX:VMOptionsFile=options' '-Djava.io.tmpdir'; do
+    fixture; suite CleanTest "$CLEAN"
+    run env "$var=$option"
+    [ "$status" -eq 2 ] || { cat "$fx/err" >&2; fail "$var $option: status $status, expected 2"; }
+    case $option in
+      -D*) message='sets java.io.tmpdir' ;;
+      *) message='cannot verify java.io.tmpdir' ;;
+    esac
+    grep -q "^test-engine: $var $message" "$fx/err" || { cat "$fx/err" >&2; fail "$var $option: no guard message"; }
+    checks=$((checks + 1))
+  done
+  fixture; suite OptionsTest '        if (!"java.io.tmpdir".equals(System.getProperty("x"))) System.exit(1);'
+  run env "$var=-Dx=java.io.tmpdir"
+  [ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "$var harmless substring: status $status"; }
+  checks=$((checks + 1))
+done
+
 # A TMPDIR with a double quote or a line break cannot be carried by JAVA_TOOL_OPTIONS (JDK 21 splits the value there):
 # the run stops and says why. A single quote and a backslash are carried (probed with JDK 21), so they must not stop it.
 # stops <TMPDIR>: the run must stop with the message.
