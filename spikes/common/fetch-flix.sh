@@ -3,17 +3,21 @@
 #
 # Usage: sh spikes/common/fetch-flix.sh <target-dir>
 # Environment (optional):
-#   FLIXW_JAR_CACHE   directory with flix-0.79.0.jar; used (read only) if its digest matches
+#   FLIXW_FLIX_VERSION   compiler version (default 0.79.0)
+#   FLIXW_JAR_CACHE   directory with flix-<version>.jar; used (read only) if its digest matches
 #   FLIXW_FLIX_BASE_URL   default https://github.com/flix/flix/releases/download
 # Prints the path of the verified jar on stdout. Exit 1 on digest mismatch or download failure.
 #
-# Pin: version and digest are the 0.79.0 entry of flixw-plugin-sdk versions.json
-# (flix-bridge/resources/dev/flixw/sdk/bridge/versions.json).
+# 0.79.0: flixw-plugin-sdk versions.json; 0.80.0: flix/flix GitHub release asset SHA-256.
 set -eu
 umask 022
-version=0.79.0
-expected=8fad2aa09567a7edabcc43f4101fa6199131df2c22929e001c87659d764f6dcf
 [ "$#" -eq 1 ] || { echo "usage: fetch-flix.sh <target-dir>" >&2; exit 2; }
+version=${FLIXW_FLIX_VERSION:-0.79.0}
+case $version in
+  0.79.0) expected=8fad2aa09567a7edabcc43f4101fa6199131df2c22929e001c87659d764f6dcf ;;
+  0.80.0) expected=0e9dec1e93071ada5eaba2e187499f0880b574e7e4ef62937d6f31c661c1fda0 ;;
+  *) echo "fetch-flix: unknown Flix version: $version" >&2; exit 2 ;;
+esac
 dir=$1
 base=${FLIXW_FLIX_BASE_URL:-https://github.com/flix/flix/releases/download}
 if command -v sha256sum >/dev/null 2>&1; then sum="sha256sum"; else sum="shasum -a 256"; fi

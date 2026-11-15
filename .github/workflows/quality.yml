@@ -31,3 +31,5 @@ jobs:
           distribution: temurin
           java-version: "21"
       - run: sh scripts/test.sh
+        env:
+          FLIXW_TEST_LEGACY: "1"
