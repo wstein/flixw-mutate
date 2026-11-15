@@ -1,6 +1,8 @@
 #!/bin/sh
 # Engine Datalog acceptance. Default: fixture. --material also fetches the pinned Flix test sources
 # and compares one mutant per available operator and file. No full mutation sweep is run.
+# Material: Flix v0.79.0, commit 36d923ca325dc466b28c63419667e6026a80f920. Compiler: fetch-flix.sh
+# defaults to 0.80.0; FLIXW_FLIX_VERSION selects a supported compiler version and its verified digest.
 set -eu
 umask 022
 case ${1:-} in
@@ -24,6 +26,7 @@ FLIXW_TEST_SOLVER_SPIKE=$root/spikes/solver-hook
 FLIXW_TEST_FLIX_JAR=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars}")
 export FLIXW_TEST_FIXTURES FLIXW_TEST_WIDE FLIXW_TEST_COVERAGE_SPIKE FLIXW_TEST_SOLVER_SPIKE FLIXW_TEST_FLIX_JAR
 if [ "${1:-}" = --material ]; then
+  echo "material: Flix v0.79.0 (36d923ca325dc466b28c63419667e6026a80f920); compiler: ${FLIXW_FLIX_VERSION:-0.80.0} (digest verified by fetch-flix.sh)"
   FLIXW_DL_MATERIAL=$work/material
   sh "$root/spikes/common/fetch-flix-material.sh" "$FLIXW_DL_MATERIAL" >/dev/null
   export FLIXW_DL_MATERIAL
