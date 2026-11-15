@@ -102,6 +102,29 @@ for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
   checks=$((checks + 1))
 done
 
+# The JDK joins quoted fragments within one token; spaces inside a quote stay in that token.
+for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
+  for quoted in '"java.io.tmpdir"' "'java.io.tmpdir'"; do
+    fixture; suite LeakTest "$LEAK"; mkdir "$fx/elsewhere"
+    run env "$var=-D$quoted=\"$fx/elsewhere\""
+    [ "$status" -eq 2 ] || { cat "$fx/err" >&2; fail "$var quoted property $quoted: status $status, expected 2"; }
+    grep -q "^test-engine: $var sets java.io.tmpdir" "$fx/err" || fail "$var quoted property $quoted: no guard message"
+    [ -z "$(ls -A "$fx/elsewhere")" ] || fail "$var quoted property $quoted: external leak"
+    checks=$((checks + 1))
+  done
+  fixture; suite CleanTest "$CLEAN"; : > "$fx/options"
+  run env "$var=-XX:VM\"OptionsFile\"=\"$fx/options\""
+  [ "$status" -eq 2 ] || { cat "$fx/err" >&2; fail "$var quoted VMOptionsFile: status $status, expected 2"; }
+  grep -q "^test-engine: $var cannot verify java.io.tmpdir" "$fx/err" || fail "$var quoted VMOptionsFile: no guard message"
+  checks=$((checks + 1))
+  for value in '-Djava.io.tmpdir=/tmp/harmless' '@options' '-XX:VMOptionsFile=options'; do
+    fixture; suite OptionsTest '        if (!System.getProperty("x").startsWith("hello ")) System.exit(1);'
+    run env "$var=-Dx=\"hello $value\""
+    [ "$status" -eq 0 ] || { cat "$fx/err" >&2; fail "$var quoted value $value: status $status"; }
+    checks=$((checks + 1))
+  done
+done
+
 # A TMPDIR with a double quote or a line break cannot be carried by JAVA_TOOL_OPTIONS (JDK 21 splits the value there):
 # the run stops and says why. A single quote and a backslash are carried (probed with JDK 21), so they must not stop it.
 # stops <TMPDIR>: the run must stop with the message.

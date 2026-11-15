@@ -25,18 +25,33 @@ esac
 # either would send the temporary files of the suites elsewhere and the leak check below would find nothing.
 for var in _JAVA_OPTIONS JDK_JAVA_OPTIONS; do
   eval "val=\${$var:-}"
-  # Treat quote delimiters as token boundaries; indirect option files cannot be inspected by this guard.
-  options=$(printf '%s' "$val" | tr "\"'" '  ')
-  set -f
-  for option in $options; do
-    case $option in
-      -Djava.io.tmpdir|-Djava.io.tmpdir=*)
-        echo "test-engine: $var sets java.io.tmpdir, which would hide leftovers: unset it" >&2; exit 2 ;;
-      @*|-XX:VMOptionsFile|-XX:VMOptionsFile=*)
-        echo "test-engine: $var cannot verify java.io.tmpdir through an options file: unset it" >&2; exit 2 ;;
-    esac
-  done
-  set +f
+  # The JDK joins quoted fragments and preserves whitespace inside quotes. Feed awk on stdin so it does not
+  # interpret backslashes in the option value. Option files remain opaque to this guard.
+  problem=$(printf '%s\n' "$val" | awk '
+    function check() {
+      if (token == "-Djava.io.tmpdir" || index(token, "-Djava.io.tmpdir=") == 1) return "property"
+      if (substr(token, 1, 1) == "@" || token == "-XX:VMOptionsFile" || index(token, "-XX:VMOptionsFile=") == 1) return "file"
+      return ""
+    }
+    { if (NR > 1) input = input "\n"; input = input $0 }
+    END {
+      quote = ""; token = ""
+      for (i = 1; i <= length(input); i++) {
+        c = substr(input, i, 1)
+        if (quote != "") { if (c == quote) quote = ""; else token = token c }
+        else if (c == "\"" || c == sprintf("%c", 39)) quote = c
+        else if (c ~ /[[:space:]]/) {
+          result = check(); if (result != "") { print result; exit }
+          token = ""
+        } else token = token c
+      }
+      result = check(); if (result != "") print result
+    }
+  ')
+  case $problem in
+    property) echo "test-engine: $var sets java.io.tmpdir, which would hide leftovers: unset it" >&2; exit 2 ;;
+    file) echo "test-engine: $var cannot verify java.io.tmpdir through an options file: unset it" >&2; exit 2 ;;
+  esac
 done
 # javac reads an @argfile with whitespace separation unless a path is quoted (as package.sh does).
 quote() { sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$/"/'; }
