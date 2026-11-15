@@ -112,8 +112,8 @@ yet): the rules and facts of the constraint sets in `src/` are rows (`RULE`, `FA
 records which test's solve contained them (level reached, not fired). The worker compiles a hook module with the program and
 rewrites the compiled `Fixpoint3.Solver.runSolverInternal` (class-file edit, `SolverPatch`) so that every solve of the
 program is recorded; the report adds `datalog sites: ...` and one `not covered` line per rule or fact that no test solved.
-A rule is matched to its source by predicate names, so equal rules in two defs are not told apart (both read as reached,
-unless the test's own def has one); a query over a model (`query m select ...` after `solve`) is not recorded, so its rule
+A rule is matched to its source by predicate names, so equal signatures in different defs are not told apart: all matching
+rows read as reached. Equal fact texts are likewise matched to all rows; a query over a model (`query m select ...` after `solve`) is not recorded, so its rule
 reads `not covered`, and so is a `query` directly over a set of facts only (it looks like a query over a model).
 If the sources have Datalog rules or facts but the compiled program has no solver class (nothing solves them, or another Flix
 version names the class differently), every one reads `not covered` and the engine passes one line starting with `warning:` to
@@ -147,6 +147,17 @@ solver class differently: no solver class means every rule and fact reads `not c
 (solves with `runSolverWithProvenance` were not tested), lattices, and whether the plugin's own JVM
 behaves as the test JVM does. Compared with the planted mutants of the solver-hook spike (`spikes/solver-hook/mutants.tsv`): 9 of
 its 12 (drop rule and drop atom) are compared and equal; the 3 negation flips have no operator here.
+
+Datalog acceptance for [#28](https://github.com/wstein/flixw-mutate/issues/28): run
+`sh scripts/test-datalog-acceptance.sh` for the fixture, or add `--material` for the pinned Flix v0.79.0
+material (the fetch script verifies `spikes/common/flix-material.sha256`). The material run compares the first available
+supported mutant of each existing Datalog operator in each of If, PSolve, Solve.Simple, Solve.Project and Stratification.
+If has rule and atom samples but no supported fact sample (its facts use lattices); this is a bounded sample, not a full mutation sweep. It prints the selected tests, executed counts and both outcomes, including
+`not covered`. A timeout or unequal outcome fails the run. The fixture checks the recorded rule and fact hits against
+its independently listed expectations, including a test that solves nothing. For owner live acceptance, run the material
+command, inspect the per-mutant pairs and test counts, and confirm that every reported pair agrees with no timeout. The
+owner's live acceptance remains open until the owner performs and confirms it. Provenance and lattices remain outside
+this acceptance. The sources are fetched separately under their original Apache-2.0 license and are not committed here.
 
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog negation, guard and head-variable operators (option 6, later stages), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from

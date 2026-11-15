@@ -53,10 +53,15 @@ public final class DatalogMapTest {
             eq(set(1, 2), DatalogMap.reached(s, "M.t", List.of(), List.of("Edge(5, 6).")));
         });
 
-        c.test("constraints in the def of the test are preferred, else all with the key count", () -> {
-            Map<Integer, DatalogSite> s = sites(rule("M.other", "R<-S"), rule("M.t", "R<-S"), rule("M.x", "R<-S"));
-            eq(set(2), DatalogMap.reached(s, "M.t", List.of("R<-S"), List.of()));
+        c.test("all sites with the same signature are reached even inside the test def", () -> {
+            Map<Integer, DatalogSite> s = sites(rule("M.other", "R<-S"), rule("M.t", "R<-S"), rule("M.x", "R<-S"), rule("M.x", "R<-T"));
+            eq(set(1, 2, 3), DatalogMap.reached(s, "M.t", List.of("R<-S"), List.of()));
             eq(set(1, 2, 3), DatalogMap.reached(s, "M.elsewhere", List.of("R<-S"), List.of()));
+        });
+
+        c.test("equal fact texts in different defs are all reached, other facts are not", () -> {
+            Map<Integer, DatalogSite> s = sites(fact("M.t", "P(1)"), fact("M.other", "P(1)"), fact("M.other", "P(2)"));
+            eq(set(1, 2), DatalogMap.reached(s, "M.t", List.of(), List.of("P(1)")));
         });
 
         c.test("a test that solved nothing reaches nothing", () ->
