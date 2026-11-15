@@ -103,7 +103,17 @@ if [ "${FLIXW_TEST_ENGINE_RUN:-1}" = 1 ]; then
 flix_jar=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars}")
 # The project is copied: the engine refuses a tab or line break in a project path, the repository path may have one.
 cp -R "$root/src/test/fixtures/calc" "$work/calc"
-full 0 '' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar"
+# Observe the actual worker launches through FLIXW_JAVA_HOME, including their inherited options.
+mkdir -p "$work/wrapped-java/bin"
+printf '%s\n' '#!/bin/sh' 'printf "%s\\n" "${JAVA_TOOL_OPTIONS-}" >> "$FLIXW_WORKER_OPTIONS"' 'exec "$FLIXW_REAL_JAVA" "$@"' > "$work/wrapped-java/bin/java"
+chmod +x "$work/wrapped-java/bin/java"
+full 0 '' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar" \
+  FLIXW_JAVA_HOME="$work/wrapped-java" FLIXW_REAL_JAVA="$java_home/bin/java" FLIXW_WORKER_OPTIONS="$work/worker-options"
+[ -s "$work/worker-options" ] || fail 'no worker JVM was observed'
+if grep -vFx -- "-Djava.io.tmpdir=\"$jtmp\"" "$work/worker-options" > /dev/null; then
+  fail 'a worker JVM did not inherit java.io.tmpdir in JAVA_TOOL_OPTIONS'
+fi
+checks=$((checks + 1))
 contains out 'mutants: 34 (killed 23, survived 9, not covered 1, timeout 1); sites left out: 0'
 contains out 'survived    src/Calc.flix:4:13  < -> <='
 contains out 'not covered src/Calc.flix:45:28  == -> !='
