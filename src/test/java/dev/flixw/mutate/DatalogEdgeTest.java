@@ -70,7 +70,7 @@ public final class DatalogEdgeTest {
             }
         });
 
-        c.test("a rule that a def of the test and another def share: the test reaches its own, a test elsewhere reaches both (limit)", () -> {
+        c.test("rules with the same signature in different defs are reached by both tests", () -> {
             Path p = EngineTest.project("""
                 mod A {
                     pub def two(): Vector[Int32] =
@@ -97,11 +97,28 @@ public final class DatalogEdgeTest {
             try (Session s = Session.open(new Engine.Config(p, EngineTest.JAVA, EngineTest.CP, null).withDatalog())) {
                 Coverage cov = s.coverage();
                 // the rule R(x) :- N(x) is at line 5 (in two) and 13 (in testOne), the query rules at 7 and 15; N(2) is at line 4, N(1) at 12
-                eq(List.of("A.testOne\t13", "A.testOne\t15"), CoverageSitesTest.reached(cov, Point.Kind.RULE).stream().filter(r -> r.startsWith("A.")).toList());
+                eq(List.of("A.testOne\t13", "A.testOne\t15", "A.testOne\t5", "A.testOne\t7"),
+                    CoverageSitesTest.reached(cov, Point.Kind.RULE).stream().filter(r -> r.startsWith("A.")).toList());
                 eq(List.of("TestA.testTwo\t13", "TestA.testTwo\t15", "TestA.testTwo\t5", "TestA.testTwo\t7"),
                     CoverageSitesTest.reached(cov, Point.Kind.RULE).stream().filter(r -> r.startsWith("TestA.")).toList());
                 // the facts have different text: each test reaches its own
                 eq(List.of("A.testOne\t12", "TestA.testTwo\t4"), CoverageSitesTest.reached(cov, Point.Kind.FACT));
+            }
+            // Run the same solver mutation with each test alone. Both source rules have key R<-N;
+            // the hook receives that key, not the source row or def name.
+            String source = Files.readString(p.resolve("src/A.flix"));
+            String tests = Files.readString(p.resolve("test/TestA.flix"));
+            for (boolean first : List.of(true, false)) {
+                Path one = EngineTest.project(first ? source : source.replace("@Test", "").replace("def testOne", "pub def testOne"),
+                    first ? tests.replace("@Test", "").replace("def testTwo", "pub def testTwo") : tests);
+                try (Session s = Session.open(new Engine.Config(one, EngineTest.JAVA, EngineTest.CP, null).withDatalogMutants())) {
+                    Mutant m = s.mutants().stream().filter(x -> x.datalog() != null
+                        && x.datalog().op().equals(DatalogMutation.RULE) && x.datalog().key().equals("R<-N"))
+                        .findFirst().orElseThrow();
+                    Result r = s.run(m);
+                    eq(Outcome.KILLED, r.outcome());
+                    yes(r.detail().startsWith(first ? "A.testOne:" : "TestA.testTwo:"), r.detail());
+                }
             }
         });
 

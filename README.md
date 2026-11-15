@@ -150,7 +150,10 @@ its 12 (drop rule and drop atom) are compared and equal; the 3 negation flips ha
 
 Datalog acceptance for [#28](https://github.com/wstein/flixw-mutate/issues/28): run
 `sh scripts/test-datalog-acceptance.sh` for the fixture, or add `--material` for the pinned Flix v0.79.0
-material (the fetch script verifies `spikes/common/flix-material.sha256`). The material run compares the first available
+material at commit `36d923ca325dc466b28c63419667e6026a80f920` (the fetch script verifies
+`spikes/common/flix-material.sha256`). The compiler is selected independently: `fetch-flix.sh` defaults to 0.80.0
+(SHA-256 `0e9dec1e93071ada5eaba2e187499f0880b574e7e4ef62937d6f31c661c1fda0`);
+`FLIXW_FLIX_VERSION=0.79.0` selects the other pinned compiler. Both downloads are digest-checked. The material run compares the first available
 supported mutant of each existing Datalog operator in each of If, PSolve, Solve.Simple, Solve.Project and Stratification.
 If has rule and atom samples but no supported fact sample (its facts use lattices); this is a bounded sample, not a full mutation sweep. It prints the selected tests, executed counts and both outcomes, including
 `not covered`. A timeout or unequal outcome fails the run. The fixture checks the recorded rule and fact hits against
