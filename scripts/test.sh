@@ -15,6 +15,7 @@ sh "$root/scripts/test-flix-versions.sh"
 sh "$root/scripts/test-workflows.sh"
 sh "$root/scripts/test-signals.sh"
 sh "$root/scripts/test-engine-leaks.sh"
+sh "$root/scripts/test-plugin-tmpdir.sh"
 sh "$root/scripts/test-engine.sh"
 sh "$root/scripts/test-sdk-source.sh"
 # Packaging must run the pin guard: a checkout at another revision builds nothing.
