@@ -21,7 +21,7 @@ for version in 0.79.0 0.80.0; do
   [ ! -e "$work/jars/flix-$version.jar" ] && [ ! -e "$work/jars/flix-$version.jar.part" ] || fail "$version left an unverified jar"
 done
 if PATH="$work/bin:$PATH" FLIXW_JAR_CACHE= FLIXW_FLIX_VERSION= sh "$root/spikes/common/fetch-flix.sh" "$work/default" > "$work/out" 2> "$work/err"; then fail 'default accepted a wrong digest'; fi
-grep -q 'digest mismatch for Flix 0.79.0' "$work/err" || fail 'wrong default version'
+grep -q 'digest mismatch for Flix 0.80.0' "$work/err" || fail 'wrong default version'
 if FLIXW_FLIX_VERSION=0.0.0 sh "$root/spikes/common/fetch-flix.sh" "$work/unknown" > "$work/out" 2> "$work/err"; then fail 'unknown version accepted'; fi
 grep -q 'unknown Flix version' "$work/err" || fail 'unknown version not reported'
 [ ! -e "$work/unknown" ] || fail 'unknown version created a target directory'

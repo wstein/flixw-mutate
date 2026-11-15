@@ -4,7 +4,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 jar=${1:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
 version=${2:?usage: sh scripts/test-plugin.sh plugin.jar <version>}
-flix_version=${FLIXW_FLIX_VERSION:-0.79.0}
+flix_version=${FLIXW_FLIX_VERSION:-0.80.0}
 work=$(mktemp -d "${TMPDIR:-/tmp}/mutate plugin.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 case $work in

@@ -1,5 +1,6 @@
 package dev.flixw.mutate;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -119,11 +120,23 @@ final class FlixApi {
             Object jvmClass = cls("ca.uwaterloo.flix.language.phase.jvm.JvmClass").getConstructors()[0].newInstance(target, patched);
             Object newClasses = via("scala.collection.immutable.MapOps", classes, "updated", target, jvmClass);
             Object newRoot = call(root, "copy", newClasses, call(root, "tests"), call(root, "main"), call(root, "sources"));
-            return cls("ca.uwaterloo.flix.runtime.CompilationResult").getConstructors()[0]
-                .newInstance(newRoot, call(compiled, "totalTime"), call(compiled, "codeSize"), call(compiled, "flix"));
+            Constructor<?> ctor = selectCompilationResultConstructor(cls("ca.uwaterloo.flix.runtime.CompilationResult"));
+            Object totalTime = call(compiled, "totalTime");
+            Object flix = call(compiled, "flix");
+            if (ctor.getParameterCount() == 4)
+                return ctor.newInstance(newRoot, totalTime, call(compiled, "codeSize"), flix);
+            return ctor.newInstance(newRoot, totalTime, flix);
         } catch (ReflectiveOperationException e) {
             throw new ApiError("Flix API not as expected: " + e, e);
         }
+    }
+
+    /** Selects a known CompilationResult constructor shape; ambiguity and unknown shapes fail closed. */
+    private static Constructor<?> selectCompilationResultConstructor(Class<?> type) {
+        Constructor<?>[] constructors = type.getConstructors();
+        if (constructors.length != 1 || (constructors[0].getParameterCount() != 3 && constructors[0].getParameterCount() != 4))
+            throw new ApiError("unexpected CompilationResult constructor shape: " + type.getName(), null);
+        return constructors[0];
     }
 
     /** One test of a loaded program: its name, whether it is marked skip, and a way to run it. */
