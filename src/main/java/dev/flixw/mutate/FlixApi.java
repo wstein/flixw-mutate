@@ -98,7 +98,7 @@ final class FlixApi {
         return new Failure(messages(call(result, "e")));
     }
 
-    /** The class of the solver in a compiled program, and the method and descriptor that {@link #hookSolver} wraps (Flix 0.79.0). */
+    /** The class of the solver in a compiled program, and the method and descriptor that {@link #hookSolver} wraps (checked on Flix 0.79.0 and 0.80.0). */
     static final String SOLVER_CLASS = "Fixpoint3.Solver.Def$runSolverInternal";
     static final String SOLVER_METHOD = "staticApply";
     static final String SOLVER_DESC = "(ZLTagged$;)Ldev/flix/runtime/Result$;";
