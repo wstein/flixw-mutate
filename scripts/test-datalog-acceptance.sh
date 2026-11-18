@@ -1,6 +1,6 @@
 #!/bin/sh
 # Engine Datalog acceptance. Default: fixture. --material also fetches the pinned Flix test sources
-# and compares one mutant per available operator and file. No full mutation sweep is run.
+# and compares every supported Datalog mutant of each file, selected against full run. No full mutation sweep of a project is run.
 # Material: Flix v0.79.0, commit 36d923ca325dc466b28c63419667e6026a80f920. Compiler: fetch-flix.sh
 # defaults to 0.80.0; FLIXW_FLIX_VERSION selects a supported compiler version and its verified digest.
 set -eu
