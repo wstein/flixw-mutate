@@ -361,6 +361,14 @@ final class Session implements AutoCloseable {
         return r;
     }
 
+    /** For tests: runs Datalog mutant {@code m} with exactly the named tests (as with selection). */
+    Result runDatalogOnly(Mutant m, List<String> tests) throws Engine.Failure, IOException {
+        return runDatalog(m, tests, true);
+    }
+
+    /** For tests (sabotage checks): replaces the coverage that selects the tests of every mutant. */
+    void useCoverage(Coverage replacement) { coverage = replacement; }
+
     /** Runs mutant {@code m} with the named tests only, in the given order. */
     Result run(Mutant m, List<String> selected, boolean selection) throws Engine.Failure, IOException {
         List<String> fields = new ArrayList<>();
