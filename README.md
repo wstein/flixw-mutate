@@ -153,14 +153,22 @@ Datalog acceptance for [#28](https://github.com/wstein/flixw-mutate/issues/28): 
 material at commit `36d923ca325dc466b28c63419667e6026a80f920` (the fetch script verifies
 `spikes/common/flix-material.sha256`). The compiler is selected independently: `fetch-flix.sh` defaults to 0.80.0
 (SHA-256 `0e9dec1e93071ada5eaba2e187499f0880b574e7e4ef62937d6f31c661c1fda0`);
-`FLIXW_FLIX_VERSION=0.79.0` selects the other pinned compiler. Both downloads are digest-checked. The material run compares the first available
-supported mutant of each existing Datalog operator in each of If, PSolve, Solve.Simple, Solve.Project and Stratification.
-If has rule and atom samples but no supported fact sample (its facts use lattices); this is a bounded sample, not a full mutation sweep. It prints the selected tests, executed counts and both outcomes, including
-`not covered`. A timeout or unequal outcome fails the run. The fixture checks the recorded rule and fact hits against
-its independently listed expectations, including a test that solves nothing. For owner live acceptance, run the material
-command, inspect the per-mutant pairs and test counts, and confirm that every reported pair agrees with no timeout. The
-owner's live acceptance remains open until the owner performs and confirms it. Provenance and lattices remain outside
-this acceptance. The sources are fetched separately under their original Apache-2.0 license and are not committed here.
+`FLIXW_FLIX_VERSION=0.79.0` selects the other pinned compiler. Both downloads are digest-checked. The material run
+compares every supported Datalog mutant of If, PSolve, Solve.Simple, Solve.Project and Stratification (lattice facts are
+listed and left out): the outcome of the selected run equals that of the full run, and the tests selected for a mutant
+are the tests whose solves the hook changes (each test alone under the mutant) for a rule or body atom, and at least those
+for a fact (a fact whose literals the solver prints differently from the source, such as `1i8`, `'a'`, `()` or `Some(a)`,
+is matched by its predicate name: more tests run and the mutant reads `not covered`). Sabotage runs replace the coverage by one
+with no hits and by one that reaches every test; the comparison must report a deviation in both. It prints per mutant the
+tests selected, the tests executed and both outcomes (including `not covered`), and one `SUMMARY` line per file. The sessions
+run one after the other (two worker JVMs at once were killed on an 8 GB machine); `FLIXW_DL_FILES=<names>` limits the
+material run to some files. A timeout or any deviation fails the run, except one named open deviation: rules with the same
+signature are one mutant at the solver, and when a test makes the changed rule invalid and another test makes it kill, the
+outcome is that of the test that runs first, so the order of the selected tests (default: by duration and kill rate) can give
+`killed` where a full run in name order gives `invalid` (Stratification, `C<-B,A` without body atom 2; the case with fixed
+test orders shows it). The owner's live acceptance remains open until the owner performs and confirms it. Provenance and
+lattices remain outside this acceptance. The sources are fetched separately under their original Apache-2.0 license and are
+not committed here.
 
 Not built yet: `Some`/`None`, `Ok`/`Err`, swapped match bodies, removed `do Op`, swapped operands, lattice
 operators, Datalog negation, guard and head-variable operators (option 6, later stages), PIT-format `mutations.xml`, equivalent-mutant filtering, dependencies from
