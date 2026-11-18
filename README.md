@@ -106,6 +106,13 @@ Limits of the run:
   Datalog route (option 6) has no marker: its mutants are applied at the solver.
 - Options given twice (`--timeout-ms`, `--no-selection`, `--no-order`, `--fail-on-survived`) are an error; `--fail-on-survived`
   counts `not covered` mutants as survivors.
+- `FLIXW_WORKER_JAVA_OPTS` (empty by default) holds JVM options for each worker JVM, split on spaces and placed before
+  `-cp`: `FLIXW_WORKER_JAVA_OPTS="-Xmx700m -XX:+UseSerialGC"`. Quotes are not interpreted, so an option cannot contain a
+  space; an empty or blank value changes nothing. No other JVM gets them, the plugin JVM
+  included; `JAVA_TOOL_OPTIONS` would reach every JVM of the run. An option the JVM refuses ends the worker at start with
+  exit 1: the run stops with "the worker died: worker exited with code 1" followed by the end of `worker.log`, which holds the JVM message. Observed case: on a 4 GiB
+  cgroup shared with other processes, a run holding two worker JVMs was killed with exit 137 (out of memory) until the heap
+  was limited this way (work on #28). The value for a machine belongs in its own environment, not here.
 
 Datalog hits (engine API `Engine.Config.withDatalog()`, no command-line option yet; first step of option 6, no Datalog mutant
 yet): the rules and facts of the constraint sets in `src/` are rows (`RULE`, `FACT`) of the site table, and the baseline run
