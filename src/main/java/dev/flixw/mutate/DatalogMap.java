@@ -36,12 +36,22 @@ final class DatalogMap {
         return out;
     }
 
+    /**
+     * Whether a site key equals a key from a solve. The solver prints a string without quotes, and the key of a source fact keeps them,
+     * so for facts quotes and white space are left out on both sides.
+     */
+    private static boolean same(Point.Kind kind, String siteKey, String key) {
+        return kind == Point.Kind.FACT ? bare(siteKey).equals(bare(key)) : siteKey.equals(key);
+    }
+
+    private static String bare(String key) { return key.replaceAll("[\"\\s]", ""); }
+
     /** The sites of the kind whose key (or, with {@code byHead}, whose predicate) is {@code key}. */
     private static List<Integer> matching(Map<Integer, DatalogSite> sites, Point.Kind kind, String key, boolean byHead) {
         List<Integer> all = new ArrayList<>();
         for (Map.Entry<Integer, DatalogSite> e : sites.entrySet()) {
             DatalogSite d = e.getValue();
-            if (d.kind() != kind || !(byHead ? DatalogSite.head(d.key()).equals(key) : d.key().equals(key))) continue;
+            if (d.kind() != kind || !(byHead ? DatalogSite.head(d.key()).equals(key) : same(kind, d.key(), key))) continue;
             all.add(e.getKey());
         }
         return all;
