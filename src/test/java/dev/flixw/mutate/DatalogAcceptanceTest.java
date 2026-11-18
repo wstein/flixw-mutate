@@ -173,8 +173,22 @@ public final class DatalogAcceptanceTest {
             someUnreached ? "" : " (every mutant is reached by every test: reach all cannot differ)", (System.nanoTime() - t0) / 1_000_000_000L);
     }
 
+    static final List<String> MATERIAL = List.of("If", "PSolve", "Solve.Simple", "Solve.Project", "Stratification");
+
+    /** The names in the comma separated list that are no material file (an empty name counts). */
+    static List<String> unknownNames(String only, List<String> valid) {
+        List<String> out = new ArrayList<>();
+        for (String name : only.split(",", -1)) if (!valid.contains(name)) out.add(name);
+        return out;
+    }
+
     public static void main(String[] args) throws Exception {
         Check c = new Check("DatalogAcceptanceTest");
+        c.test("FLIXW_DL_FILES: a name that is no material file is reported, the valid names are kept", () -> {
+            eq(List.of(), unknownNames("If,Stratification", MATERIAL));
+            eq(List.of("Test.Exp.Fixpoint.Stratification.flix"), unknownNames("If,Test.Exp.Fixpoint.Stratification.flix", MATERIAL));
+            eq(List.of(""), unknownNames("If,", MATERIAL));
+        });
         c.test("fixture reachability matches the independently listed rules and facts", () -> {
             try (Session s = Session.open(config(DatalogHitsTest.FIXTURE))) {
                 eq(List.of(), DatalogHitsTest.deviations(s.coverage()));
@@ -216,12 +230,16 @@ public final class DatalogAcceptanceTest {
             }
         });
         String material = System.getenv("FLIXW_DL_MATERIAL");
+        String only = System.getenv("FLIXW_DL_FILES");
+        if (only != null && !unknownNames(only, MATERIAL).isEmpty()) {
+            System.err.println("FLIXW_DL_FILES: unknown name(s) " + unknownNames(only, MATERIAL) + "; valid names: " + MATERIAL);
+            System.exit(2);
+        }
         if (material == null) {
             System.out.println("Datalog material: not run (opt-in)");
         } else {
             // FLIXW_DL_FILES (comma separated names) limits the run to some of the files, for diagnosis on a loaded machine
-            String only = System.getenv("FLIXW_DL_FILES");
-            for (String name : List.of("If", "PSolve", "Solve.Simple", "Solve.Project", "Stratification")) {
+            for (String name : MATERIAL) {
                 if (only != null && !List.of(only.split(",")).contains(name)) continue;
                 c.test("material " + name + ": selected and full outcomes", () -> {
                     Path root = Check.tempDir("datalog-material-");
