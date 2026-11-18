@@ -36,11 +36,20 @@ final class WorkerClient implements AutoCloseable {
     private final BufferedWriter toWorker;
     private final BlockingQueue<String> lines = new LinkedBlockingQueue<>();
 
+    /** Name of the environment variable whose value is given to each worker JVM as options. */
+    static final String OPTIONS_VARIABLE = "FLIXW_WORKER_JAVA_OPTS";
+
     /**
-     * Starts {@code java -cp <classpath> <mainClass>}; the worker's stderr goes to {@code log}.
+     * Starts {@code java [options] -cp <classpath> <mainClass>} with the options of {@value #OPTIONS_VARIABLE}; the
+     * worker's stderr goes to {@code log}.
      */
     WorkerClient(Path java, String classpath, String mainClass, Path log) throws IOException {
-        ProcessBuilder pb = new ProcessBuilder(java.toString(), "-cp", classpath, mainClass);
+        this(java, System.getenv(OPTIONS_VARIABLE), classpath, mainClass, log);
+    }
+
+    /** As above with the options given: split on spaces, no quoting; null, empty or blank adds none. */
+    WorkerClient(Path java, String options, String classpath, String mainClass, Path log) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(command(java, options, classpath, mainClass));
         pb.redirectError(ProcessBuilder.Redirect.appendTo(log.toFile()));
         process = pb.start();
         toWorker = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
@@ -56,6 +65,22 @@ final class WorkerClient implements AutoCloseable {
         }, "worker-reader");
         reader.setDaemon(true);
         reader.start();
+    }
+
+    /** The worker command line: the options come before {@code -cp}. */
+    static List<String> command(Path java, String options, String classpath, String mainClass) {
+        List<String> command = new ArrayList<>();
+        command.add(java.toString());
+        if (options != null) {
+            for (String option : options.split(" ")) {
+                String trimmed = option.strip();
+                if (!trimmed.isEmpty()) command.add(trimmed);
+            }
+        }
+        command.add("-cp");
+        command.add(classpath);
+        command.add(mainClass);
+        return command;
     }
 
     /**
