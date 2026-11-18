@@ -126,6 +126,26 @@ public final class WorkerClientTest {
             yes(Files.readString(log).contains("NoSuchFlixwOption"), "log: " + Files.readString(log));
         });
 
+        c.test("an unusable option is reported with the exit code also when the JVM ended before the request", () -> {
+            Path log = dir.resolve("k.log");
+            try (WorkerClient w = new WorkerClient(JAVA, "-XX:+NoSuchFlixwOption", CP, "dev.flixw.mutate.FakeWorker", log)) {
+                long deadline = System.nanoTime() + 30_000_000_000L;
+                while (w.alive() && System.nanoTime() < deadline) Thread.sleep(20);
+                eq(false, w.alive());
+                try {
+                    w.request(Protocol.encode("echo", "x"), List.of("done"), 20_000);
+                    throw new AssertionError("no exception");
+                } catch (WorkerClient.Died e) {
+                    yes(e.getMessage().contains("exited with code 1"), e.getMessage());
+                }
+            }
+        });
+
+        c.test("options are split at any white space", () -> {
+            eq(List.of("/j/java", "-Xmx1m", "-Dk=v", "-Da=b", "-Dc=d", "-cp", "a:b", "M"),
+                WorkerClient.command(Path.of("/j/java"), "-Xmx1m\t-Dk=v\n-Da=b \t  -Dc=d\n", "a:b", "M"));
+        });
+
         c.finish();
     }
 }
