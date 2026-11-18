@@ -105,13 +105,19 @@ flix_jar=$(sh "$root/spikes/common/fetch-flix.sh" "${FLIXW_TEST_JARS:-$work/jars
 cp -R "$root/src/test/fixtures/calc" "$work/calc"
 # Observe the actual worker launches through FLIXW_JAVA_HOME, including their inherited options.
 mkdir -p "$work/wrapped-java/bin"
-printf '%s\n' '#!/bin/sh' 'printf "%s\\n" "${JAVA_TOOL_OPTIONS-}" >> "$FLIXW_WORKER_OPTIONS"' 'exec "$FLIXW_REAL_JAVA" "$@"' > "$work/wrapped-java/bin/java"
+printf '%s\n' '#!/bin/sh' 'printf "%s\\n" "${JAVA_TOOL_OPTIONS-}" >> "$FLIXW_WORKER_OPTIONS"' 'printf "%s\\n" "$*" >> "$FLIXW_WORKER_ARGS"' 'exec "$FLIXW_REAL_JAVA" "$@"' > "$work/wrapped-java/bin/java"
 chmod +x "$work/wrapped-java/bin/java"
 full 0 '' FLIXW_PROJECT_ROOT="$work/calc" FLIXW_COMPILER_JAR="$flix_jar" \
-  FLIXW_JAVA_HOME="$work/wrapped-java" FLIXW_REAL_JAVA="$java_home/bin/java" FLIXW_WORKER_OPTIONS="$work/worker-options"
+  FLIXW_JAVA_HOME="$work/wrapped-java" FLIXW_REAL_JAVA="$java_home/bin/java" FLIXW_WORKER_OPTIONS="$work/worker-options" \
+  FLIXW_WORKER_ARGS="$work/worker-args" FLIXW_WORKER_JAVA_OPTS='-Xmx700m -XX:+UseSerialGC'
 [ -s "$work/worker-options" ] || fail 'no worker JVM was observed'
 if grep -vFx -- "-Djava.io.tmpdir=\"$jtmp\"" "$work/worker-options" > /dev/null; then
   fail 'a worker JVM did not inherit java.io.tmpdir in JAVA_TOOL_OPTIONS'
+fi
+# FLIXW_WORKER_JAVA_OPTS reaches the worker JVMs only, as arguments before -cp (not through JAVA_TOOL_OPTIONS, checked above).
+[ -s "$work/worker-args" ] || fail 'no worker JVM arguments were observed'
+if grep -v '^-Xmx700m -XX:+UseSerialGC -cp ' "$work/worker-args" > /dev/null; then
+  fail 'a worker JVM did not get FLIXW_WORKER_JAVA_OPTS before -cp'
 fi
 checks=$((checks + 1))
 contains out 'mutants: 34 (killed 23, survived 9, not covered 1, timeout 1); sites left out: 0'
