@@ -74,6 +74,13 @@ public final class DatalogAcceptanceTest {
      */
     private static final String KNOWN = "known-order: ";
 
+    /**
+     * Over-selection of a fact mutant: a fact whose literals the solver prints differently from the source (typed literals such as
+     * {@code 1i8}, characters, {@code ()}, constructors) matches by predicate name, so more tests are selected than solve it; they
+     * run and the mutant reads not covered. This is the documented imprecision (it never loses a test); a rule is matched exactly.
+     */
+    private static final String OVER_FACT = "over-selected-fact: ";
+
     /** What a selected run gets wrong against the full run (outcome) and against the truth (tests). Empty: nothing. */
     private static List<String> deviations(Run selected, Run full, List<List<String>> truth) {
         List<String> out = new ArrayList<>();
@@ -87,8 +94,14 @@ public final class DatalogAcceptanceTest {
             if (x == Outcome.TIMEOUT || y == Outcome.TIMEOUT) out.add("timeout: " + d);
             else if (x != y && sharing > 1 && killedOrInvalid) out.add(KNOWN + d.op() + " " + d.key() + " " + d.atom() + " selected " + x + " full " + y);
             else if (x != y) out.add("outcome: " + d + " selected " + x + " full " + y);
-            if (!selected.tests().get(i).equals(truth.get(i)))
-                out.add("tests: " + d + " selected " + selected.tests().get(i).size() + " truth " + truth.get(i).size());
+            List<String> sel = selected.tests().get(i);
+            // the session ran the tests that its coverage selects (a mutant run with fewer or more tests than the coverage names)
+            if (selected.results().get(i).selected() != sel.size())
+                out.add("ran-selection: " + d + " coverage " + sel.size() + " ran with " + selected.results().get(i).selected());
+            List<String> tru = truth.get(i);
+            if (!sel.containsAll(tru)) out.add("under-selected: " + d + " selected " + sel.size() + " truth " + tru.size());
+            else if (!tru.containsAll(sel))
+                out.add((d.op().equals(DatalogMutation.FACT) ? OVER_FACT : "over-selected: ") + d + " selected " + sel.size() + " truth " + tru.size());
         }
         return out;
     }
@@ -142,18 +155,21 @@ public final class DatalogAcceptanceTest {
             : Set.of(DatalogMutation.RULE, DatalogMutation.ATOM, DatalogMutation.FACT), ops);
         List<String> real = deviations(selected, full, truth);
         for (String d : real) System.out.println(label + " DEVIATION " + d);
-        eq(List.of(), real.stream().filter(d -> !d.startsWith(KNOWN)).toList());
+        eq(List.of(), real.stream().filter(d -> !d.startsWith(KNOWN) && !d.startsWith(OVER_FACT)).toList());
         // Sabotage: the same comparison must fail. No marks: no test reaches any mutant (a killed mutant reads not covered). Reach all:
         // every test reaches every mutant (the outcomes agree, the selected tests are not those that solve the rule or fact).
         List<String> bad = deviations(noMarks, full, truth);
         boolean someReached = truth.stream().anyMatch(t -> !t.isEmpty());
-        yes(!someReached || any(bad, "outcome") && any(bad, "tests"), "no marks went unnoticed: " + bad);
+        yes(!someReached || any(bad, "outcome") && any(bad, "under-selected"), "no marks went unnoticed: " + bad);
         List<String> over = deviations(reachAll, full, truth);
-        boolean someUnreached = truth.stream().anyMatch(t -> t.size() < allTests);
-        yes(!someUnreached || any(over, "tests"), "reach all went unnoticed: " + over);
+        // a rule that some test does not solve: a reach-all coverage over-selects it (facts do not count, see OVER_FACT)
+        boolean someUnreached = false;
+        for (int i = 0; i < truth.size(); i++)
+            if (!selected.mutants().get(i).datalog().op().equals(DatalogMutation.FACT) && truth.get(i).size() < allTests) someUnreached = true;
+        yes(!someUnreached || any(over, "over-selected: "), "reach all went unnoticed: " + over);
         yes(!any(over, "outcome") && !any(over, "timeout"), "reach all changed an outcome: " + over);
-        System.out.printf("SUMMARY %s: tests=%d mutants=%d equal=%d not-covered=%d lattice-skipped=%d operators=%s known-order-deviations=%d sabotage no-marks=%d reach-all=%d%s seconds=%d%n",
-            label, allTests, selected.mutants().size(), selected.mutants().size() - real.size(), notCovered, skipped, ops, real.size(), bad.size(), over.size(),
+        System.out.printf("SUMMARY %s: tests=%d mutants=%d equal=%d not-covered=%d lattice-skipped=%d operators=%s known-order=%d over-selected-facts=%d sabotage no-marks=%d reach-all=%d%s seconds=%d%n",
+            label, allTests, selected.mutants().size(), selected.mutants().size() - real.stream().filter(d -> d.startsWith(KNOWN)).count(), notCovered, skipped, ops, real.stream().filter(d -> d.startsWith(KNOWN)).count(), real.stream().filter(d -> d.startsWith(OVER_FACT)).count(), bad.size(), over.size(),
             someUnreached ? "" : " (every mutant is reached by every test: reach all cannot differ)", (System.nanoTime() - t0) / 1_000_000_000L);
     }
 
