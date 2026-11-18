@@ -86,6 +86,46 @@ public final class WorkerClientTest {
             eq(false, w.alive());
         });
 
+        c.test("without options the command line is java -cp <classpath> <main class>", () -> {
+            List<String> plain = List.of("/j/java", "-cp", "a:b", "M");
+            eq(plain, WorkerClient.command(Path.of("/j/java"), null, "a:b", "M"));
+            eq(plain, WorkerClient.command(Path.of("/j/java"), "", "a:b", "M"));
+            eq(plain, WorkerClient.command(Path.of("/j/java"), " \t ", "a:b", "M"));
+        });
+
+        c.test("options are split on spaces and placed before -cp", () -> {
+            eq(List.of("/j/java", "-Xmx700m", "-XX:+UseSerialGC", "-cp", "a:b", "M"),
+                WorkerClient.command(Path.of("/j/java"), "-Xmx700m -XX:+UseSerialGC", "a:b", "M"));
+            eq(List.of("/j/java", "-Xmx1m", "-Dk=v", "-cp", "a:b", "M"),
+                WorkerClient.command(Path.of("/j/java"), "  -Xmx1m   -Dk=v ", "a:b", "M"));
+        });
+
+        c.test("the worker JVM is launched with the options before -cp", () -> {
+            Path stub = dir.resolve("stub");
+            Files.createDirectories(stub);
+            Path argLog = dir.resolve("stub-args");
+            Path java = stub.resolve("java");
+            Files.writeString(java, "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > '" + argLog + "'\nexec '" + JAVA + "' \"$@\"\n");
+            yes(java.toFile().setExecutable(true), "stub java");
+            try (WorkerClient w = new WorkerClient(java, "-Xmx700m -XX:+UseSerialGC", CP, "dev.flixw.mutate.FakeWorker", dir.resolve("i.log"))) {
+                eq("x", w.request(Protocol.encode("echo", "x"), List.of("done"), 20_000).get(0).field(0));
+            }
+            eq(List.of("-Xmx700m", "-XX:+UseSerialGC", "-cp", CP, "dev.flixw.mutate.FakeWorker"), Files.readAllLines(argLog));
+        });
+
+        c.test("an unusable option ends the worker with an exit code and a message in the log", () -> {
+            Path log = dir.resolve("j.log");
+            try (WorkerClient w = new WorkerClient(JAVA, "-XX:+NoSuchFlixwOption", CP, "dev.flixw.mutate.FakeWorker", log)) {
+                try {
+                    w.request(Protocol.encode("echo", "x"), List.of("done"), 20_000);
+                    throw new AssertionError("no exception");
+                } catch (WorkerClient.Died e) {
+                    yes(e.getMessage().contains("exited with code 1"), e.getMessage());
+                }
+            }
+            yes(Files.readString(log).contains("NoSuchFlixwOption"), "log: " + Files.readString(log));
+        });
+
         c.finish();
     }
 }
