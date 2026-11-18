@@ -10,7 +10,10 @@ import java.util.TreeSet;
  * Maps what a test's solves contained to the rows of the site table. The solver input carries no source position, so
  * the mapping is by name, as in the coverage spike (#22): a rule by its signature ({@code Head<-Body1,Body2}), a fact by its
  * text (without white space and the final dot), or, if no fact of the sources has that text (a fact written with
- * variables or an expression), by its predicate name. All sites with a matching key count: the solver mutation also
+ * variables or an expression), by its predicate name. A fact key is compared without quotes and white space on both sides
+ * (the solver prints a string without quotes): {@code N("d e")} and {@code N("de")} are one key, and a string fact {@code N("a")}
+ * is matched by the solve text {@code N(a)} of a character fact. Facts with different literals can therefore read as one fact; that only makes a fact read "reached" that no
+ * test solved (over-selection, the mutant then reads not covered), never the reverse. All sites with a matching key count: the solver mutation also
  * acts by key, even when the sites belong to different test definitions. Equal rules or facts are not told apart: all
  * of them read as reached. That can only make a site read "reached" that no test reached, never the reverse.
  */
