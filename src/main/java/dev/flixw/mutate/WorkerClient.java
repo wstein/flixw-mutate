@@ -47,7 +47,7 @@ final class WorkerClient implements AutoCloseable {
         this(java, System.getenv(OPTIONS_VARIABLE), classpath, mainClass, log);
     }
 
-    /** As above with the options given: split on spaces, no quoting; null, empty or blank adds none. */
+    /** As above with the options given: split at white space, no quoting; null, empty or blank adds none. */
     WorkerClient(Path java, String options, String classpath, String mainClass, Path log) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(command(java, options, classpath, mainClass));
         pb.redirectError(ProcessBuilder.Redirect.appendTo(log.toFile()));
@@ -72,9 +72,8 @@ final class WorkerClient implements AutoCloseable {
         List<String> command = new ArrayList<>();
         command.add(java.toString());
         if (options != null) {
-            for (String option : options.split(" ")) {
-                String trimmed = option.strip();
-                if (!trimmed.isEmpty()) command.add(trimmed);
+            for (String option : options.strip().split("\\s+")) {
+                if (!option.isEmpty()) command.add(option);
             }
         }
         command.add("-cp");
@@ -93,7 +92,9 @@ final class WorkerClient implements AutoCloseable {
             toWorker.write('\n');
             toWorker.flush();
         } catch (IOException e) {
-            throw new Died("worker is not running: " + e.getMessage());
+            // A worker that ended before the write (for example a refused JVM option): report its exit code.
+            String code = exitCode();
+            throw new Died("unknown".equals(code) ? "worker is not running: " + e.getMessage() : "worker exited with code " + code);
         }
         // toNanos saturates; the time left is computed by difference, which nanoTime allows.
         long start = System.nanoTime();
