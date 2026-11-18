@@ -64,6 +64,14 @@ public final class DatalogMapTest {
             eq(set(1, 2), DatalogMap.reached(s, "M.t", List.of(), List.of("P(1)")));
         });
 
+        c.test("a string fact is reached by the text the solver prints (no quotes), also next to an integer fact of the same text", () -> {
+            Map<Integer, DatalogSite> s = sites(fact("M.a", "A(1,2)"), fact("M.b", "A(\"1\",\"2\")"), fact("M.b", "A(\"3\",\"4\")"));
+            eq(set(1, 2), DatalogMap.reached(s, "M.t", List.of(), List.of("A(1, 2).")));
+            eq(set(3), DatalogMap.reached(s, "M.t", List.of(), List.of("A(3, 4).")));
+            Map<Integer, DatalogSite> w = sites(fact("M.a", "N(\"d e\")"), fact("M.a", "N(7)"));
+            eq(set(1), DatalogMap.reached(w, "M.t", List.of(), List.of("N(d e).")));
+        });
+
         c.test("a test that solved nothing reaches nothing", () ->
             eq(set(), DatalogMap.reached(sites(rule("M.a", "R<-S"), fact("M.a", "S(1)")), "M.t", List.of(), List.of())));
 
