@@ -54,6 +54,7 @@ final class Session implements AutoCloseable {
     private Map<String, Long> testNanos = Map.of();
     private boolean empty;
     private boolean warnedNoSolver;
+    private List<String> lastRan = List.of();
     /** The fingerprints of the models of each test's solves in the baseline run (Datalog mutants). */
     private final Map<String, List<String>> baselineModels = new TreeMap<>();
 
@@ -347,6 +348,7 @@ final class Session implements AutoCloseable {
      */
     Result run(Mutant m) throws Engine.Failure, IOException {
         if (m.datalog() != null) {
+            lastRan = List.of();
             if (!config.selection()) return runDatalog(m, testNames, false);
             List<String> selected = coverage.testsFor(m.datalog().row());
             if (selected.isEmpty()) return new Result(m, file(m), position(m), Outcome.NOT_COVERED, "", 0, 0, testCount);
@@ -365,6 +367,9 @@ final class Session implements AutoCloseable {
     Result runDatalogOnly(Mutant m, List<String> tests) throws Engine.Failure, IOException {
         return runDatalog(m, tests, true);
     }
+
+    /** For tests: the tests the last {@link #run(Mutant)} of a Datalog mutant sent to the worker (empty if none ran). */
+    List<String> lastRan() { return lastRan; }
 
     /** For tests (sabotage checks): replaces the coverage that selects the tests of every mutant. */
     void useCoverage(Coverage replacement) { coverage = replacement; }
@@ -412,6 +417,7 @@ final class Session implements AutoCloseable {
      */
     private Result runDatalog(Mutant m, List<String> selected, boolean selection) throws Engine.Failure, IOException {
         DatalogMutation d = m.datalog();
+        lastRan = List.copyOf(selected);
         List<String> fields = new ArrayList<>(List.of(d.op(), d.key(), String.valueOf(d.atom())));
         if (selection) fields.addAll(selected);
         try {

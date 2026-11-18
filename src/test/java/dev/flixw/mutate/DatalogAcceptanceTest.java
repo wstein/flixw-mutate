@@ -21,7 +21,7 @@ public final class DatalogAcceptanceTest {
     private enum Mode { REAL, NO_MARKS, REACH_ALL }
 
     /** The Datalog mutants of a session with their results and the tests the (possibly sabotaged) coverage selects for each. */
-    private record Run(List<Mutant> mutants, List<Result> results, List<List<String>> tests) { }
+    private record Run(List<Mutant> mutants, List<Result> results, List<List<String>> tests, List<List<String>> ran) { }
 
     /** Lattice facts ({@code ;} in the text) are not an operator of this stage; on the material they are listed and left out. */
     private static boolean lattice(DatalogMutation d) { return d.op().equals(DatalogMutation.FACT) && d.key().contains(";"); }
@@ -39,11 +39,13 @@ public final class DatalogAcceptanceTest {
         try {
             List<Result> results = new ArrayList<>();
             List<List<String>> tests = new ArrayList<>();
+            List<List<String>> ran = new ArrayList<>();
             for (Mutant m : mutants) {
                 tests.add(s.coverage().testsFor(m.datalog().row()));
                 results.add(s.run(m));
+                ran.add(s.lastRan());
             }
-            return new Run(mutants, results, tests);
+            return new Run(mutants, results, tests, ran);
         } finally {
             s.useCoverage(real);
         }
@@ -75,6 +77,15 @@ public final class DatalogAcceptanceTest {
     private static final String KNOWN = "known-order: ";
 
     /**
+     * The only mutant that may show the known deviation: Stratification, drop body atom 2 of the rules {@code C<-B,A} (test04 and
+     * test05 against the negation of test06 to test08). Whether it shows (0 to 6 rows) depends on the durations that order the tests,
+     * so the allowed set is fixed, not the number. Any other mutant that differs fails.
+     */
+    private static boolean knownOrder(String label, DatalogMutation d) {
+        return label.equals("Stratification") && d.op().equals(DatalogMutation.ATOM) && d.key().equals("C<-B,A") && d.atom() == 1;
+    }
+
+    /**
      * Over-selection of a fact mutant: a fact whose literals the solver prints differently from the source (typed literals such as
      * {@code 1i8}, characters, {@code ()}, constructors) matches by predicate name, so more tests are selected than solve it; they
      * run and the mutant reads not covered. This is the documented imprecision (it never loses a test); a rule is matched exactly.
@@ -82,7 +93,7 @@ public final class DatalogAcceptanceTest {
     private static final String OVER_FACT = "over-selected-fact: ";
 
     /** What a selected run gets wrong against the full run (outcome) and against the truth (tests). Empty: nothing. */
-    private static List<String> deviations(Run selected, Run full, List<List<String>> truth) {
+    private static List<String> deviations(String label, Run selected, Run full, List<List<String>> truth) {
         List<String> out = new ArrayList<>();
         for (int i = 0; i < selected.mutants().size(); i++) {
             DatalogMutation d = selected.mutants().get(i).datalog();
@@ -92,12 +103,13 @@ public final class DatalogAcceptanceTest {
                 && m.datalog().atom() == d.atom()).count();
             boolean killedOrInvalid = x == Outcome.KILLED && y == Outcome.INVALID || x == Outcome.INVALID && y == Outcome.KILLED;
             if (x == Outcome.TIMEOUT || y == Outcome.TIMEOUT) out.add("timeout: " + d);
-            else if (x != y && sharing > 1 && killedOrInvalid) out.add(KNOWN + d.op() + " " + d.key() + " " + d.atom() + " selected " + x + " full " + y);
+            else if (x != y && sharing > 1 && killedOrInvalid && knownOrder(label, d)) out.add(KNOWN + d.op() + " " + d.key() + " " + d.atom() + " selected " + x + " full " + y);
             else if (x != y) out.add("outcome: " + d + " selected " + x + " full " + y);
             List<String> sel = selected.tests().get(i);
-            // the session ran the tests that its coverage selects (a mutant run with fewer or more tests than the coverage names)
-            if (selected.results().get(i).selected() != sel.size())
-                out.add("ran-selection: " + d + " coverage " + sel.size() + " ran with " + selected.results().get(i).selected());
+            // the session ran the tests that its coverage selects (the names, in any order), not fewer, more or others
+            List<String> ran = selected.ran().get(i);
+            if (selected.results().get(i).selected() != ran.size() || !new TreeSet<>(ran).equals(new TreeSet<>(sel)) || ran.size() != sel.size())
+                out.add("ran-selection: " + d + " coverage " + sel + " ran with " + ran);
             List<String> tru = truth.get(i);
             if (!sel.containsAll(tru)) out.add("under-selected: " + d + " selected " + sel.size() + " truth " + tru.size());
             else if (!tru.containsAll(sel))
@@ -128,6 +140,8 @@ public final class DatalogAcceptanceTest {
                 } else mutants.add(m);
             }
             yes(!mutants.isEmpty(), "no Datalog mutants in " + project);
+            // a silent increase of the skipped lattice facts would shrink the comparison: If has four (its facts are lattice facts)
+            eq(material && label.equals("If") ? 4 : 0, skipped);
             allTests = s.coverage().tests().size();
             selected = runAll(s, mutants, Mode.REAL);
             truth = truth(s, mutants);
@@ -153,15 +167,15 @@ public final class DatalogAcceptanceTest {
         // If has no supported fact: its facts are lattice facts
         eq(material && label.equals("If") ? Set.of(DatalogMutation.RULE, DatalogMutation.ATOM)
             : Set.of(DatalogMutation.RULE, DatalogMutation.ATOM, DatalogMutation.FACT), ops);
-        List<String> real = deviations(selected, full, truth);
+        List<String> real = deviations(label, selected, full, truth);
         for (String d : real) System.out.println(label + " DEVIATION " + d);
         eq(List.of(), real.stream().filter(d -> !d.startsWith(KNOWN) && !d.startsWith(OVER_FACT)).toList());
         // Sabotage: the same comparison must fail. No marks: no test reaches any mutant (a killed mutant reads not covered). Reach all:
         // every test reaches every mutant (the outcomes agree, the selected tests are not those that solve the rule or fact).
-        List<String> bad = deviations(noMarks, full, truth);
+        List<String> bad = deviations(label, noMarks, full, truth);
         boolean someReached = truth.stream().anyMatch(t -> !t.isEmpty());
         yes(!someReached || any(bad, "outcome") && any(bad, "under-selected"), "no marks went unnoticed: " + bad);
-        List<String> over = deviations(reachAll, full, truth);
+        List<String> over = deviations(label, reachAll, full, truth);
         // a rule that some test does not solve: a reach-all coverage over-selects it (facts do not count, see OVER_FACT)
         boolean someUnreached = false;
         for (int i = 0; i < truth.size(); i++)
@@ -184,6 +198,14 @@ public final class DatalogAcceptanceTest {
 
     public static void main(String[] args) throws Exception {
         Check c = new Check("DatalogAcceptanceTest");
+        c.test("the known order deviation is allowed for one mutant of Stratification only", () -> {
+            DatalogMutation ok = new DatalogMutation(1, DatalogMutation.ATOM, "C<-B,A", 1);
+            yes(knownOrder("Stratification", ok), "the named mutant");
+            yes(!knownOrder("Solve.Simple", ok), "another file");
+            yes(!knownOrder("Stratification", new DatalogMutation(1, DatalogMutation.ATOM, "C<-B,A", 0)), "another atom");
+            yes(!knownOrder("Stratification", new DatalogMutation(1, DatalogMutation.ATOM, "D<-A,C", 1)), "another rule");
+            yes(!knownOrder("Stratification", new DatalogMutation(1, DatalogMutation.RULE, "C<-B,A", 1)), "another operator");
+        });
         c.test("FLIXW_DL_FILES: a name that is no material file is reported, the valid names are kept", () -> {
             eq(List.of(), unknownNames("If,Stratification", MATERIAL));
             eq(List.of("Test.Exp.Fixpoint.Stratification.flix"), unknownNames("If,Test.Exp.Fixpoint.Stratification.flix", MATERIAL));
